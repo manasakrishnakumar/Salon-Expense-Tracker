@@ -75,8 +75,19 @@ export async function inviteWorker(req, res) {
     Math.random().toString(36).slice(-5).toUpperCase() +
     Math.floor(Math.random() * 90 + 10);
 
-  // Create the Appwrite account
-  const newUser = await users.create(ID.unique(), email, undefined, tempPassword, name);
+  // Create the Appwrite account — catch duplicate-email errors gracefully
+  let newUser;
+  try {
+    newUser = await users.create(ID.unique(), email, undefined, tempPassword, name);
+  } catch (err) {
+    // Appwrite throws 409 when the email is already registered
+    const status = err?.code === 409 ? 409 : 500;
+    const message = err?.code === 409
+      ? `An account for ${email} already exists. If this worker has lost access, ask them to use "Forgot Password" on the login page.`
+      : `Failed to create account: ${err?.message || 'Unknown error'}`;
+    return res.status(status).json({ error: message });
+  }
+
   // Tag them as a worker scoped to this owner, before they ever log in
   await users.updatePrefs(newUser.$id, { role: 'worker', ownerId: req.user.ownerId });
 

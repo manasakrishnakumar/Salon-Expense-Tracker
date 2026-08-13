@@ -147,6 +147,7 @@ export default function AnalysisPage() {
   /* P&L data (A4) */
   const [plData, setPlData]         = useState(null);
   const [plLoading, setPlLoading]   = useState(false);
+  const [plError, setPlError]       = useState('');
 
   /* Daily summary sending (A2) */
   const [summaryLoading, setSummaryLoading] = useState(false);
@@ -167,21 +168,22 @@ export default function AnalysisPage() {
       .finally(() => setForecastLoading(false));
   }, [activeTab, forecastData, forecastLoading]);
 
-  /* Load P&L when tab is opened */
-  useEffect(() => {
-    if (activeTab !== 'pl') return;
-    setPlLoading(true);
-    apiGet(`/api/reports/profit-loss?from=${from}&to=${to}`)
-      .then(setPlData)
-      .catch(err => console.error(err))
-      .finally(() => setPlLoading(false));
-  }, [activeTab, from, to]);
-
   /* ── Date bounds ─────────────────────────────── */
   const { from, to } = useMemo(
     () => getDateBounds(preset, customFrom, customTo),
     [preset, customFrom, customTo]
   );
+
+  /* Load P&L when tab is opened — must be AFTER from/to are defined */
+  useEffect(() => {
+    if (activeTab !== 'pl') return;
+    setPlLoading(true);
+    setPlError('');
+    apiGet(`/api/reports/profit-loss?from=${from}&to=${to}`)
+      .then(setPlData)
+      .catch(err => setPlError(err.message || 'Failed to load P&L'))
+      .finally(() => setPlLoading(false));
+  }, [activeTab, from, to]);
 
   /* ── Filtered records ────────────────────────── */
   const filteredServices = useMemo(
@@ -849,6 +851,7 @@ export default function AnalysisPage() {
   /* P&L Render (A4) */
   const renderProfitLoss = () => {
     if (plLoading) return <div className="empty-state"><div className="spinner" /></div>;
+    if (plError) return <div className="empty-state"><div className="empty-state-icon">⚠️</div><div className="empty-state-title">Failed to load P&L</div><div className="empty-state-text">{plError}</div></div>;
     if (!plData) return <div className="empty-state"><div className="empty-state-text">No P&L data</div></div>;
     const { revenue, stockCost, otherExpenses, tips, grossProfit, netProfit, monthlyBreakdown = [], workerPerformance = [] } = plData;
     const profitColor = netProfit >= 0 ? '#10B981' : '#EF4444';
