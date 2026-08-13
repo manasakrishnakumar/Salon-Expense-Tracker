@@ -6,30 +6,36 @@ import {
   getNeverRestockedProducts,
   getTotalInventoryValue,
   buildProductMaster,
+  computeReorderSuggestions,
 } from '../logic/stockService.js';
 
 async function loadStockInputs(ownerId) {
-  const [restockDocs, serviceRecordDocs] = await Promise.all([
+  const [restockDocs, serviceRecordDocs, adjustmentDocs] = await Promise.all([
     listMine(env.collections.restock, ownerId, [], 500),
     listMine(env.collections.serviceRecords, ownerId, [], 500),
+    listMine(env.collections.stockAdjustments, ownerId, [], 200).catch(() => []),
   ]);
-  return { restockDocs, serviceRecordDocs };
+  return { restockDocs, serviceRecordDocs, adjustmentDocs };
 }
 
 // Owner-only at the route level.
 export async function stockStatus(req, res) {
-  const { restockDocs, serviceRecordDocs } = await loadStockInputs(req.user.ownerId);
-  const stock = computeStockStatus(restockDocs, serviceRecordDocs);
+  const { restockDocs, serviceRecordDocs, adjustmentDocs } = await loadStockInputs(req.user.ownerId);
+  const stock = computeStockStatus(restockDocs, serviceRecordDocs, undefined, adjustmentDocs);
+  const reorderSuggestions = computeReorderSuggestions(stock, restockDocs);
+
   res.json({
     products: buildProductMaster(),
     stock,
+    adjustments: adjustmentDocs,
     totalInventoryValue: getTotalInventoryValue(restockDocs),
+    reorderSuggestions,
   });
 }
 
 export async function lowStock(req, res) {
-  const { restockDocs, serviceRecordDocs } = await loadStockInputs(req.user.ownerId);
-  const stock = computeStockStatus(restockDocs, serviceRecordDocs);
+  const { restockDocs, serviceRecordDocs, adjustmentDocs } = await loadStockInputs(req.user.ownerId);
+  const stock = computeStockStatus(restockDocs, serviceRecordDocs, undefined, adjustmentDocs);
   res.json({
     lowStock: getLowStockProducts(stock),
     neverRestocked: getNeverRestockedProducts(stock),

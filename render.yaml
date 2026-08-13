@@ -41,5 +41,15 @@ services:
         value: audit_log
       - key: COLLECTION_SERVICE_PRICES
         value: service_prices
+      - key: COLLECTION_CUSTOMERS
+        value: customers
+      - key: COLLECTION_ATTENDANCE
+        value: attendance
+      - key: COLLECTION_STOCK_ADJUSTMENTS
+        value: stock_adjustments
+      - key: SMTP_USER
+        sync: false # set to your Gmail address
+      - key: SMTP_PASS
+        sync: false # set to your Gmail App Password
       - key: SENTRY_DSN
         sync: false # optional — leave unset to disable

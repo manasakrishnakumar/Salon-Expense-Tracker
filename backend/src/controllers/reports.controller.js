@@ -1,8 +1,13 @@
 import { env } from '../config/env.js';
 import { listMine } from '../repo.js';
-import { dailyReport, monthlyReport, mostUsedProducts } from '../logic/reportService.js';
-import { computeStockStatus } from '../logic/stockService.js';
+import { users } from '../config/appwrite.js';
+import {
+  dailyReport, monthlyReport, mostUsedProducts,
+  profitLossReport, generateCsvExport,
+} from '../logic/reportService.js';
+import { computeStockStatus, getLowStockProducts } from '../logic/stockService.js';
 import { forecastNextMonthTotal, computeDailyConsumptionRates, estimateStockRunout } from '../logic/forecast.js';
+import { sendDailySummaryEmail } from '../config/email.js';
 
 async function loadRecordsAndExpenses(userId) {
   const [serviceRecords, expenses] = await Promise.all([
@@ -27,11 +32,6 @@ export async function mostUsed(req, res) {
   res.json({ products: mostUsedProducts(serviceRecords) });
 }
 
-/**
- * Forward-looking view: where expenses are trending, and which products
- * are on track to run out soonest given how they've actually been used
- * lately (not just what's left on the shelf right now).
- */
 export async function forecast(req, res) {
   const [expenses, restockDocs, serviceRecords] = await Promise.all([
     listMine(env.collections.expenses, req.user.ownerId, [], 1000),
@@ -42,13 +42,62 @@ export async function forecast(req, res) {
   const expenseForecast = forecastNextMonthTotal(expenses, 'date', 'amount');
   const serviceCostForecast = forecastNextMonthTotal(serviceRecords, 'Date', 'totalCost');
 
-  const stockMap = computeStockStatus(restockDocs, serviceRecords);
+  const adjustmentDocs = await listMine(env.collections.stockAdjustments, req.user.ownerId, [], 200).catch(() => []);
+  const stockMap = computeStockStatus(restockDocs, serviceRecords, undefined, adjustmentDocs);
   const dailyRates = computeDailyConsumptionRates(serviceRecords, 30);
   const stockRunout = estimateStockRunout(stockMap, dailyRates);
 
   res.json({
     expenseForecast,
     serviceCostForecast,
-    stockRunout: stockRunout.slice(0, 10), // soonest-to-empty first
+    stockRunout: stockRunout.slice(0, 10),
   });
+}
+
+// A4 — Profit & Loss Report
+export async function profitLoss(req, res) {
+  const { from, to } = req.query;
+  if (!from || !to) {
+    return res.status(400).json({ error: 'from and to query params are required (YYYY-MM-DD)' });
+  }
+  const { serviceRecords, expenses } = await loadRecordsAndExpenses(req.user.ownerId);
+  res.json(profitLossReport(serviceRecords, expenses, from, to));
+}
+
+// A1 — CSV Export
+export async function exportCsv(req, res) {
+  const { from, to } = req.query;
+  if (!from || !to) {
+    return res.status(400).json({ error: 'from and to query params are required (YYYY-MM-DD)' });
+  }
+  const { serviceRecords, expenses } = await loadRecordsAndExpenses(req.user.ownerId);
+  const csv = generateCsvExport(serviceRecords, expenses, from, to);
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', `attachment; filename="salon-report-${from}-to-${to}.csv"`);
+  res.send(csv);
+}
+
+// A2 — Send Daily Summary Email
+export async function sendDailySummary(req, res) {
+  const today = new Date().toISOString().split('T')[0];
+  const { serviceRecords, expenses } = await loadRecordsAndExpenses(req.user.ownerId);
+
+  const [restockDocs, adjustmentDocs] = await Promise.all([
+    listMine(env.collections.restock, req.user.ownerId, [], 500),
+    listMine(env.collections.stockAdjustments, req.user.ownerId, [], 200).catch(() => []),
+  ]);
+
+  const report = dailyReport(serviceRecords, expenses, today);
+  const stockMap = computeStockStatus(restockDocs, serviceRecords, undefined, adjustmentDocs);
+  const lowStockCount = getLowStockProducts(stockMap).length;
+
+  const ownerUser = await users.get(req.user.ownerId);
+
+  const sent = await sendDailySummaryEmail({
+    toEmail: ownerUser.email,
+    date: today,
+    stats: { ...report, lowStockCount },
+  });
+
+  res.json({ sent, sentTo: ownerUser.email, date: today, stats: report });
 }

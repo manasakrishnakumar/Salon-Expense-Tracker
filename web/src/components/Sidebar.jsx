@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { id: 'services', label: 'Services', icon: '✂️' },
   { id: 'stock', label: 'Inventory', icon: '📦', ownerOnly: true },
   { id: 'workers', label: 'Workers', icon: '👥', ownerOnly: true },
+  { id: 'customers', label: 'Customers', icon: '👤', ownerOnly: true },
   { id: 'analysis', label: 'Analysis', icon: '📊', ownerOnly: true },
 ];
 

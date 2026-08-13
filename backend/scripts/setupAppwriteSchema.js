@@ -1,35 +1,17 @@
 /**
- * Idempotent Appwrite schema setup (Phase 2 RBAC + Phase 4 pricing).
+ * Idempotent Appwrite schema setup — Phase 5 (customers, attendance, stock adjustments, tips).
  *
  * Run with: npm run setup:appwrite
  *
  * Safe to run repeatedly — every step checks whether the collection/attribute
- * already exists before creating it. This is here instead of asking you to
- * click things together by hand in the Appwrite console, and it's the kind
- * of thing worth pointing at in a report as "infrastructure as code."
+ * already exists before creating it.
  *
- * What it provisions:
- *  - a new `audit_log` collection (who did what, for accountability once
- *    workers have their own logins)
- *  - two new attributes on the existing `service_record` collection
- *    (recordedByUserId / recordedByName) so a worker's own service records
- *    can be told apart from the rest of their salon's
- *  - the `restock_history` and `workers` collections themselves, which
- *    turned out not to exist in Appwrite at all yet (discovered when this
- *    script first ran against the real project) — the original app's
- *    StockContext/WorkersContext were silently failing every request
- *    against them and falling back to an empty list, which reads as "no
- *    data yet" rather than an obvious error
- *  - a new `service_prices` collection (ownerId, serviceId, price) — what
- *    a salon actually charges for a service, per owner, kept separate from
- *    the shared code catalog's `cost` (product usage cost)
- *  - `unitPrice` / `totalPrice` attributes on `service_record`, alongside
- *    the existing unitCost/totalCost
- *
- * Note: Appwrite attribute creation is asynchronous — a freshly created
- * attribute briefly reports status "processing" before "available". If a
- * write against a brand-new attribute fails immediately after running this,
- * wait a few seconds and retry.
+ * New in this version:
+ *  - `customers` collection (C1, C2, C4)
+ *  - `attendance` collection (W1)
+ *  - `stock_adjustments` collection (I4)
+ *  - `tip` attribute on `service_record` (P5)
+ *  - `customerId` / `customerName` attributes on `service_record` (C1, C2)
  */
 import { databases } from '../src/config/appwrite.js';
 import { env } from '../src/config/env.js';
@@ -64,8 +46,18 @@ async function ensureFloatAttribute(collectionId, key, required = false, xdefaul
     console.log(`  = attribute '${collectionId}.${key}' already exists`);
   } catch (err) {
     if (err.code !== 404) throw err;
-    // Appwrite rejects a default value on a required attribute.
     await databases.createFloatAttribute(dbId, collectionId, key, required, undefined, undefined, required ? undefined : xdefault);
+    console.log(`  + created attribute '${collectionId}.${key}'`);
+  }
+}
+
+async function ensureIntegerAttribute(collectionId, key, required = false, xdefault) {
+  try {
+    await databases.getAttribute(dbId, collectionId, key);
+    console.log(`  = attribute '${collectionId}.${key}' already exists`);
+  } catch (err) {
+    if (err.code !== 404) throw err;
+    await databases.createIntegerAttribute(dbId, collectionId, key, required, undefined, undefined, required ? undefined : xdefault);
     console.log(`  + created attribute '${collectionId}.${key}'`);
   }
 }
@@ -84,6 +76,8 @@ async function ensureBooleanAttribute(collectionId, key, required = false, xdefa
 async function main() {
   console.log(`Setting up Appwrite schema in database '${dbId}'...\n`);
 
+  // ─── Previously existing schema (Phase 2-4) ──────────────────────────────
+
   console.log(`[audit_log]`);
   await ensureCollection(env.collections.auditLog, 'Audit Log');
   await ensureStringAttribute(env.collections.auditLog, 'ownerId', 64, true);
@@ -99,6 +93,10 @@ async function main() {
   await ensureStringAttribute(env.collections.serviceRecords, 'recordedByName', 128, false);
   await ensureFloatAttribute(env.collections.serviceRecords, 'unitPrice', false, 0);
   await ensureFloatAttribute(env.collections.serviceRecords, 'totalPrice', false, 0);
+  // Phase 5 additions
+  await ensureFloatAttribute(env.collections.serviceRecords, 'tip', false, 0);
+  await ensureStringAttribute(env.collections.serviceRecords, 'customerId', 64, false);
+  await ensureStringAttribute(env.collections.serviceRecords, 'customerName', 120, false);
 
   console.log(`\n[${env.collections.restock}]`);
   await ensureCollection(env.collections.restock, 'Restock History');
@@ -121,6 +119,39 @@ async function main() {
   await ensureStringAttribute(env.collections.servicePrices, 'ownerId', 64, true);
   await ensureStringAttribute(env.collections.servicePrices, 'serviceId', 64, true);
   await ensureFloatAttribute(env.collections.servicePrices, 'price', true);
+
+  // ─── Phase 5: New collections ─────────────────────────────────────────────
+
+  console.log(`\n[${env.collections.customers}]`);
+  await ensureCollection(env.collections.customers, 'Customers');
+  await ensureStringAttribute(env.collections.customers, 'userID', 64, true);
+  await ensureStringAttribute(env.collections.customers, 'name', 120, true);
+  await ensureStringAttribute(env.collections.customers, 'phone', 20, false);
+  await ensureStringAttribute(env.collections.customers, 'email', 200, false);
+  await ensureFloatAttribute(env.collections.customers, 'loyaltyPoints', false, 0);
+  await ensureFloatAttribute(env.collections.customers, 'totalSpend', false, 0);
+  await ensureIntegerAttribute(env.collections.customers, 'visitCount', false, 0);
+  await ensureStringAttribute(env.collections.customers, 'notes', 500, false);
+  await ensureStringAttribute(env.collections.customers, 'createdAt', 32, false);
+
+  console.log(`\n[${env.collections.attendance}]`);
+  await ensureCollection(env.collections.attendance, 'Attendance');
+  await ensureStringAttribute(env.collections.attendance, 'userID', 64, true);
+  await ensureStringAttribute(env.collections.attendance, 'workerName', 120, true);
+  await ensureStringAttribute(env.collections.attendance, 'workerId', 64, false);
+  await ensureStringAttribute(env.collections.attendance, 'date', 16, true);
+  await ensureStringAttribute(env.collections.attendance, 'checkIn', 32, false);
+  await ensureStringAttribute(env.collections.attendance, 'checkOut', 32, false);
+  await ensureIntegerAttribute(env.collections.attendance, 'durationMinutes', false, 0);
+
+  console.log(`\n[${env.collections.stockAdjustments}]`);
+  await ensureCollection(env.collections.stockAdjustments, 'Stock Adjustments');
+  await ensureStringAttribute(env.collections.stockAdjustments, 'userID', 64, true);
+  await ensureStringAttribute(env.collections.stockAdjustments, 'productName', 120, true);
+  await ensureFloatAttribute(env.collections.stockAdjustments, 'quantityRemoved', true);
+  await ensureStringAttribute(env.collections.stockAdjustments, 'reason', 32, true); // wastage|theft|expiry|other
+  await ensureStringAttribute(env.collections.stockAdjustments, 'notes', 500, false);
+  await ensureStringAttribute(env.collections.stockAdjustments, 'date', 16, false);
 
   console.log('\nSchema setup complete.');
 }

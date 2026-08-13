@@ -5,6 +5,7 @@ import { ExpenseProvider } from './context/ExpenseContext';
 import { ServicesProvider } from './context/ServicesContext';
 import { StockProvider } from './context/StockContext';
 import { WorkersProvider } from './context/WorkersContext';
+import { CustomersProvider } from './context/CustomersContext';
 import Sidebar from './components/Sidebar';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
@@ -12,19 +13,15 @@ import ServicesPage from './pages/ServicesPage';
 import StockPage from './pages/StockPage';
 import WorkersPage from './pages/WorkersPage';
 import AnalysisPage from './pages/AnalysisPage';
+import CustomersPage from './pages/CustomersPage';
 
-const OWNER_ONLY_PAGES = new Set(['dashboard', 'stock', 'workers', 'analysis']);
+const OWNER_ONLY_PAGES = new Set(['dashboard', 'stock', 'workers', 'analysis', 'customers']);
 
 function AppContent() {
   const { isLoggedIn, loading, user } = useAuth();
   const [activePage, setActivePage] = useState('dashboard');
   const isWorker = user?.role === 'worker';
 
-  // A worker landing here defaults straight to Services (their only page)
-  // instead of a Dashboard full of numbers they can't load — Sidebar hides
-  // the nav for the rest, but this covers the initial render too. The real
-  // enforcement is server-side (every owner-only endpoint 403s a worker);
-  // this is just about not showing a broken-looking page.
   const effectivePage = isWorker && OWNER_ONLY_PAGES.has(activePage) ? 'services' : activePage;
 
   if (loading) {
@@ -45,12 +42,13 @@ function AppContent() {
 
   const renderPage = () => {
     switch (effectivePage) {
-      case 'dashboard': return <DashboardPage onNavigate={setActivePage} />;
-      case 'services': return <ServicesPage />;
-      case 'stock':    return <StockPage />;
-      case 'workers':  return <WorkersPage />;
-      case 'analysis': return <AnalysisPage />;
-      default:         return <DashboardPage onNavigate={setActivePage} />;
+      case 'dashboard':  return <DashboardPage onNavigate={setActivePage} />;
+      case 'services':   return <ServicesPage />;
+      case 'stock':      return <StockPage />;
+      case 'workers':    return <WorkersPage />;
+      case 'analysis':   return <AnalysisPage />;
+      case 'customers':  return <CustomersPage />;
+      default:           return <DashboardPage onNavigate={setActivePage} />;
     }
   };
 
@@ -72,7 +70,9 @@ export default function App() {
           <ServicesProvider>
             <StockProvider>
               <WorkersProvider>
-                <AppContent />
+                <CustomersProvider>
+                  <AppContent />
+                </CustomersProvider>
               </WorkersProvider>
             </StockProvider>
           </ServicesProvider>

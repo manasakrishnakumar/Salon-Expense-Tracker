@@ -8,6 +8,9 @@ export const serviceRecordCreateSchema = z.object({
   serviceId: z.string().min(1),
   quantity: z.number().int().positive().max(1000).default(1),
   workerName: z.string().max(120).optional().default(''),
+  tip: z.number().nonnegative().optional().default(0),
+  customerId: z.string().max(64).optional().default(''),
+  customerName: z.string().max(120).optional().default(''),
 });
 
 export const restockCreateSchema = z.object({
@@ -33,7 +36,6 @@ export const workerCreateSchema = z.object({
 export const workerInviteSchema = z.object({
   name: z.string().min(1).max(120),
   email: z.string().email(),
-  password: z.string().min(8).max(256),
 });
 
 export const setPriceSchema = z.object({
@@ -55,3 +57,33 @@ export const monthlyReportQuerySchema = z.object({
   month: z.coerce.number().int().min(1).max(12),
   year: z.coerce.number().int().min(2000).max(2100),
 });
+
+// ── Phase 5: New schemas ──────────────────────────────────────────────────────
+
+export const customerCreateSchema = z.object({
+  name: z.string().min(1).max(120),
+  phone: z.string().max(20).optional().default(''),
+  email: z.string().email().optional().or(z.literal('')).default(''),
+  notes: z.string().max(500).optional().default(''),
+});
+
+export const customerUpdateSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  phone: z.string().max(20).optional(),
+  email: z.string().email().optional().or(z.literal('')),
+  notes: z.string().max(500).optional(),
+});
+
+export const attendanceCheckInSchema = z.object({
+  workerName: z.string().min(1).max(120),
+  workerId: z.string().max(64).optional().default(''),
+});
+
+export const stockAdjustmentSchema = z.object({
+  productName: z.string().min(1).max(120),
+  quantityRemoved: z.number().positive(),
+  reason: z.enum(['wastage', 'theft', 'expiry', 'other']),
+  notes: z.string().max(500).optional().default(''),
+  date: z.string().optional(),
+});
+

@@ -1,11 +1,14 @@
 import { env } from '../config/env.js';
 import { Query } from '../config/appwrite.js';
-import { listMine, createMine, deleteMine, getDoc } from '../repo.js';
+import { listMine, createMine, deleteMine, getDoc, updateDoc } from '../repo.js';
 import { findService, calculateServiceCost } from '../logic/costCalculator.js';
 import { calculateServicePrice } from '../logic/pricing.js';
 import { getPriceForService } from '../pricingRepo.js';
 import { streamReceipt } from '../logic/invoice.js';
 import { HttpError } from '../middleware/errorHandler.js';
+import { computeStockStatus, getLowStockProducts } from '../logic/stockService.js';
+import { sendLowStockAlert } from '../config/email.js';
+import { users } from '../config/appwrite.js';
 
 /**
  * Owners see every service record for their salon; a worker only sees the
@@ -20,20 +23,14 @@ export async function listServiceRecords(req, res) {
 }
 
 /**
- * The whole point of moving this server-side: a client sends only
- * {serviceId, quantity, workerName} — it can never dictate unitCost or
- * totalCost. Those come exclusively from the canonical catalog, computed
- * here, so a tampered/buggy client can't misreport what a service cost or
- * silently skip the stock impact.
- *
- * Both owners and workers can create records; the record always belongs to
- * the salon (userID = ownerId), while recordedByUserId/recordedByName say
- * who actually did it — an owner recording on a walk-in's behalf can still
- * pick any staff name (workerName), but a worker's own name is used
- * automatically for accountability if they don't override it.
+ * Creates a service record and:
+ * - Computes costs + prices server-side
+ * - Accepts optional tip, customerId, customerName
+ * - Updates customer stats (totalSpend, visitCount, loyaltyPoints) if a customer is linked
+ * - Checks for low stock after recording and emails owner if any products cross threshold
  */
 export async function createServiceRecord(req, res) {
-  const { serviceId, quantity, workerName } = req.body;
+  const { serviceId, quantity, workerName, tip = 0, customerId = '', customerName = '' } = req.body;
 
   const service = findService(serviceId);
   if (!service) throw new HttpError(404, 'Service not found in catalog');
@@ -54,13 +51,77 @@ export async function createServiceRecord(req, res) {
     totalCost,
     unitPrice,
     totalPrice,
+    tip: Number(tip) || 0,
+    customerId: customerId || '',
+    customerName: customerName || '',
     WorkerName: effectiveWorkerName || '',
     Date: new Date().toISOString(),
     recordedByUserId: req.user.id,
     recordedByName: req.user.name || '',
   });
 
+  // Update customer stats if linked (fire-and-forget — don't block the response)
+  if (customerId) {
+    updateCustomerStats(customerId, totalPrice, tip).catch(err =>
+      console.error('[serviceRecords] customer stats update failed:', err.message)
+    );
+  }
+
+  // Check low stock after every service and alert owner (fire-and-forget)
+  checkAndAlertLowStock(req.user.ownerId).catch(err =>
+    console.error('[serviceRecords] low stock check failed:', err.message)
+  );
+
   res.status(201).json({ record });
+}
+
+async function updateCustomerStats(customerId, totalPrice, tip) {
+  try {
+    const customer = await getDoc(env.collections.customers, customerId);
+    const newSpend = (customer.totalSpend || 0) + (totalPrice || 0);
+    const newVisits = (customer.visitCount || 0) + 1;
+    // 1 loyalty point per ₹100 spent
+    const newPoints = (customer.loyaltyPoints || 0) + Math.floor((totalPrice || 0) / 100);
+    await updateDoc(env.collections.customers, customerId, {
+      totalSpend: newSpend,
+      visitCount: newVisits,
+      loyaltyPoints: newPoints,
+    });
+  } catch (err) {
+    console.error('[serviceRecords] updateCustomerStats error:', err.message);
+  }
+}
+
+// Throttle: store last alert time per owner in memory (resets on server restart — acceptable)
+const lastAlertSent = {};
+
+async function checkAndAlertLowStock(ownerId) {
+  const now = Date.now();
+  // Max one alert per salon per hour
+  if (lastAlertSent[ownerId] && now - lastAlertSent[ownerId] < 60 * 60 * 1000) return;
+
+  const [restockDocs, serviceRecordDocs] = await Promise.all([
+    listMine(env.collections.restock, ownerId, [], 500),
+    listMine(env.collections.serviceRecords, ownerId, [], 500),
+  ]);
+
+  let adjustmentDocs = [];
+  try {
+    adjustmentDocs = await listMine(env.collections.stockAdjustments, ownerId, [], 200);
+  } catch (_) { /* collection may not exist yet */ }
+
+  const stock = computeStockStatus(restockDocs, serviceRecordDocs, undefined, adjustmentDocs);
+  const low = getLowStockProducts(stock);
+  if (low.length === 0) return;
+
+  // Get the owner's email from Appwrite
+  try {
+    const ownerUser = await users.get(ownerId);
+    await sendLowStockAlert({ toEmail: ownerUser.email, lowProducts: low });
+    lastAlertSent[ownerId] = now;
+  } catch (err) {
+    console.error('[serviceRecords] low stock alert email failed:', err.message);
+  }
 }
 
 // Owner-only at the route level (a worker deleting evidence of their own
@@ -70,12 +131,6 @@ export async function removeServiceRecord(req, res) {
   res.status(204).send();
 }
 
-/**
- * A receipt is reasonable for either role to pull up (a worker handing a
- * customer their receipt at checkout is normal), but only for a record
- * that actually belongs to this salon — and a worker only for one they
- * personally recorded, same visibility rule as the list endpoint.
- */
 export async function getInvoice(req, res) {
   const record = await getDoc(env.collections.serviceRecords, req.params.id);
 

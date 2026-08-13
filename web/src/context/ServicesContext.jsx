@@ -36,9 +36,14 @@ export const ServicesProvider = ({ children }) => {
 
   // The server computes unitCost/totalCost from the canonical catalog —
   // this call sends only the intent (which service, how many, who did it).
-  const recordService = async (serviceId, workerName = '', quantity = 1) => {
+  const recordService = async (serviceId, workerName = '', quantity = 1, extras = {}) => {
     try {
-      const { record } = await apiPost('/api/service-records', { serviceId, workerName, quantity });
+      const { record } = await apiPost('/api/service-records', {
+        serviceId, workerName, quantity,
+        tip: extras.tip || 0,
+        customerId: extras.customerId || '',
+        customerName: extras.customerName || '',
+      });
       setServiceRecords(prev => [record, ...prev]);
       return { success: true, record };
     } catch (error) {

@@ -7,7 +7,7 @@ import {
 import { useExpenses } from '../context/ExpenseContext';
 import { useServices } from '../context/ServicesContext';
 import { useWorkers } from '../context/WorkersContext';
-import { apiGet } from '../lib/api';
+import { apiGet, apiPost, apiDownload } from '../lib/api';
 
 /* ─── Colour palettes ──────────────────────────────────── */
 const CHART_COLORS = [
@@ -134,7 +134,7 @@ export default function AnalysisPage() {
   const { serviceRecords } = useServices();
   const { workers }        = useWorkers();
 
-  /* tabs: overview | revenue | expenses | workers | services | monthly */
+  /* tabs: overview | revenue | expenses | workers | services | monthly | forecast | pl */
   const [activeTab, setActiveTab]   = useState('overview');
   const [preset, setPreset]         = useState('thisMonth');
   const [customFrom, setCustomFrom] = useState('');
@@ -143,6 +143,14 @@ export default function AnalysisPage() {
   /* sort state for services table */
   const [sortBy, setSortBy]         = useState('revenue');
   const [catFilter, setCatFilter]   = useState('all');
+
+  /* P&L data (A4) */
+  const [plData, setPlData]         = useState(null);
+  const [plLoading, setPlLoading]   = useState(false);
+
+  /* Daily summary sending (A2) */
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryMsg, setSummaryMsg]         = useState('');
 
   /* ── Forecast (server-side: backend/src/logic/forecast.js) ──── */
   const [forecastData, setForecastData]       = useState(null);
@@ -158,6 +166,16 @@ export default function AnalysisPage() {
       .catch(err => setForecastError(err.message || 'Failed to load forecast.'))
       .finally(() => setForecastLoading(false));
   }, [activeTab, forecastData, forecastLoading]);
+
+  /* Load P&L when tab is opened */
+  useEffect(() => {
+    if (activeTab !== 'pl') return;
+    setPlLoading(true);
+    apiGet(`/api/reports/profit-loss?from=${from}&to=${to}`)
+      .then(setPlData)
+      .catch(err => console.error(err))
+      .finally(() => setPlLoading(false));
+  }, [activeTab, from, to]);
 
   /* ── Date bounds ─────────────────────────────── */
   const { from, to } = useMemo(
@@ -311,27 +329,31 @@ export default function AnalysisPage() {
     return months;
   }, [serviceRecords, expenses]);
 
-  /* ── CSV Export ──────────────────────────────── */
-  const handleExportCSV = () => {
-    const rows = [
-      ['Type','Date','Name','Category','Amount','Cost','Worker'],
-      ...filteredServices.map(r => [
-        'Revenue', (r.Date || '').split('T')[0], r.serviceName || '', r.category || '',
-        (r.totalPrice || 0).toFixed(2), (r.totalCost || 0).toFixed(2), r.WorkerName || '',
-      ]),
-      ...filteredExpenses.map(e => [
-        'Expense', e.date || '', e.name || '', e.category || '',
-        parseFloat(e.amount || 0).toFixed(2), '', '',
-      ]),
-    ];
-    const csv = rows.map(r => r.map(c => '"' + String(c).replace(/"/g,'""') + '"').join(',')).join('\n');
-    const blob = new Blob([csv], { type:'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = 'salon_report_' + from + '_to_' + to + '.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+  /* ── CSV Export (A1) — now via backend endpoint ─ */
+  const handleExportCSV = async () => {
+    try {
+      await apiDownload(
+        `/api/reports/export?from=${from}&to=${to}`,
+        `salon-report-${from}-to-${to}.csv`
+      );
+    } catch (err) {
+      alert('Export failed: ' + err.message);
+    }
+  };
+
+  /* ── Daily Summary Email (A2) ────────────────── */
+  const handleSendSummary = async () => {
+    setSummaryLoading(true);
+    setSummaryMsg('');
+    try {
+      const res = await apiPost('/api/reports/send-daily-summary', {});
+      setSummaryMsg(`✅ Summary sent to ${res.sentTo}`);
+    } catch (err) {
+      setSummaryMsg('❌ Failed: ' + err.message);
+    } finally {
+      setSummaryLoading(false);
+      setTimeout(() => setSummaryMsg(''), 5000);
+    }
   };
 
   /* ── Shared axis style ───────────────────────── */
@@ -824,6 +846,69 @@ export default function AnalysisPage() {
   };
 
   /* ════════════════════════════════════════════════ */
+  /* P&L Render (A4) */
+  const renderProfitLoss = () => {
+    if (plLoading) return <div className="empty-state"><div className="spinner" /></div>;
+    if (!plData) return <div className="empty-state"><div className="empty-state-text">No P&L data</div></div>;
+    const { revenue, stockCost, otherExpenses, tips, grossProfit, netProfit, monthlyBreakdown = [], workerPerformance = [] } = plData;
+    const profitColor = netProfit >= 0 ? '#10B981' : '#EF4444';
+    return (
+      <>
+        <div className="stat-grid" style={{ marginBottom: 24 }}>
+          {[
+            { label: 'Revenue', value: fmtINR(revenue), icon: '💰', bg: 'linear-gradient(135deg,#10B981,#059669)' },
+            { label: 'Tips', value: fmtINR(tips), icon: '🎁', bg: 'linear-gradient(135deg,#EC4899,#BE185D)' },
+            { label: 'Stock Cost', value: fmtINR(stockCost), icon: '🧴', bg: 'linear-gradient(135deg,#F59E0B,#D97706)' },
+            { label: 'Other Expenses', value: fmtINR(otherExpenses), icon: '📋', bg: 'linear-gradient(135deg,#EF4444,#DC2626)' },
+            { label: 'Gross Profit', value: fmtINR(grossProfit), icon: '📈', bg: 'linear-gradient(135deg,#6366F1,#4F46E5)' },
+            { label: 'Net Profit', value: (netProfit >= 0 ? '+' : '') + fmtINR(netProfit), icon: netProfit >= 0 ? '🚀' : '⚠️', bg: `linear-gradient(135deg,${profitColor},${profitColor}99)` },
+          ].map(s => (
+            <div key={s.label} className="stat-card" style={{ background: s.bg }}>
+              <div className="stat-card-header"><div><div className="stat-card-label">{s.label}</div></div><div className="stat-card-icon">{s.icon}</div></div>
+              <div className="stat-card-value" style={{ fontSize: 22 }}>{s.value}</div>
+            </div>
+          ))}
+        </div>
+        {monthlyBreakdown.length > 0 && (
+          <div className="chart-card" style={{ marginBottom: 24 }}>
+            <div className="chart-title">📅 Monthly Profit & Loss</div>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={monthlyBreakdown.map(m => ({ month: m.month, Revenue: Math.round(m.revenue), 'Stock Cost': Math.round(m.stockCost), 'Other Exp': Math.round(m.otherExpenses), 'Net Profit': Math.round(m.netProfit) }))}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(168,85,247,0.1)" />
+                <XAxis dataKey="month" tick={{ fill: 'var(--text-muted)', fontSize: 11 }} />
+                <YAxis tick={{ fill: 'var(--text-muted)', fontSize: 11 }} tickFormatter={v => 'Rs.' + v} />
+                <Tooltip content={<CustomTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 13 }} />
+                <Bar dataKey="Revenue" fill="#10B981" radius={[4,4,0,0]} />
+                <Bar dataKey="Stock Cost" fill="#F59E0B" radius={[4,4,0,0]} />
+                <Bar dataKey="Other Exp" fill="#EF4444" radius={[4,4,0,0]} />
+                <Bar dataKey="Net Profit" fill="#A855F7" radius={[4,4,0,0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+        {workerPerformance.length > 0 && (
+          <div className="chart-card">
+            <div className="chart-title">👥 Worker Revenue Contribution</div>
+            <div style={{ display: 'grid', gap: 8 }}>
+              {workerPerformance.map((w, i) => (
+                <div key={w.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ width: 28, fontWeight: 800, color: i < 3 ? ['#F59E0B','#9CA3AF','#CD7F32'][i] : 'var(--text-muted)', fontSize: 13 }}>#{i+1}</div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 700 }}>{w.name}</div>
+                    <div className="text-sm text-muted">{w.services} services · Tips: {fmtINR(w.tips)}</div>
+                  </div>
+                  <div style={{ fontWeight: 800, color: '#10B981', fontSize: 16 }}>{fmtINR(w.revenue)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </>
+    );
+  };
+
+  /* ════════════════════════════════════════════════ */
   const TABS = [
     { key:'overview',  label:'Overview' },
     { key:'revenue',   label:'Revenue'  },
@@ -832,6 +917,7 @@ export default function AnalysisPage() {
     { key:'services',  label:'Services' },
     { key:'monthly',   label:'Monthly'  },
     { key:'forecast',  label:'Forecast' },
+    { key:'pl',        label:'📈 P&L'   },
   ];
 
   return (
@@ -840,11 +926,17 @@ export default function AnalysisPage() {
         <div className="page-header-row">
           <div>
             <h1 className="page-title">Analysis</h1>
-            <p className="page-subtitle">Financial insights and trends for your salon</p>
+            <p className="page-subtitle">Financial insights, P&L, and trends for your salon</p>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={handleExportCSV} style={{ gap:6 }}>
-            📥 Export CSV
-          </button>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {summaryMsg && <span style={{ fontSize: 12, color: summaryMsg.startsWith('✅') ? '#10B981' : '#EF4444' }}>{summaryMsg}</span>}
+            <button className="btn btn-ghost btn-sm" onClick={handleSendSummary} disabled={summaryLoading}>
+              {summaryLoading ? '...' : '📧 Email Summary'}
+            </button>
+            <button className="btn btn-ghost btn-sm" onClick={handleExportCSV}>
+              📥 Export CSV
+            </button>
+          </div>
         </div>
       </div>
 
@@ -883,6 +975,7 @@ export default function AnalysisPage() {
       {activeTab === 'services' && <>{renderKPIs()}{renderServices()}</>}
       {activeTab === 'monthly'  && renderMonthly()}
       {activeTab === 'forecast' && renderForecast()}
+      {activeTab === 'pl'       && renderProfitLoss()}
     </div>
   );
 }

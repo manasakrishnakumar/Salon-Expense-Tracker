@@ -28,6 +28,9 @@ export const env = {
     products: process.env.COLLECTION_PRODUCTS || 'products',
     auditLog: process.env.COLLECTION_AUDIT_LOG || 'audit_log',
     servicePrices: process.env.COLLECTION_SERVICE_PRICES || 'service_prices',
+    customers: process.env.COLLECTION_CUSTOMERS || 'customers',
+    attendance: process.env.COLLECTION_ATTENDANCE || 'attendance',
+    stockAdjustments: process.env.COLLECTION_STOCK_ADJUSTMENTS || 'stock_adjustments',
   },
 
   // SMTP for sending worker invite emails (optional — if unset, email is skipped)

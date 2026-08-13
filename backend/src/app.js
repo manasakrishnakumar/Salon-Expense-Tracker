@@ -15,6 +15,9 @@ import { restockRouter } from './routes/restock.routes.js';
 import { expensesRouter } from './routes/expenses.routes.js';
 import { workersRouter } from './routes/workers.routes.js';
 import { reportsRouter } from './routes/reports.routes.js';
+import { customersRouter } from './routes/customers.routes.js';
+import { attendanceRouter } from './routes/attendance.routes.js';
+import { stockAdjustmentsRouter } from './routes/stockAdjustments.routes.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 export function createApp() {
@@ -26,16 +29,11 @@ export function createApp() {
   app.use(express.json());
   app.use(morgan(env.nodeEnv === 'development' ? 'dev' : 'combined'));
 
-  // Generous general limit — this is an internal business app, not a public
-  // API — with a much stricter limit on the account-creating invite route
-  // (see routes/workers.routes.js) since that one's more sensitive.
   app.use(
     '/api',
     rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: true, legacyHeaders: false })
   );
 
-  // Public, unauthenticated — a contract doc, not privileged data. Full
-  // spec lives at backend/openapi.yaml (see docs/ for the narrative docs).
   const openApiSpec = loadOpenApiSpec();
   if (openApiSpec) {
     app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openApiSpec));
@@ -49,9 +47,11 @@ export function createApp() {
   app.use('/api/expenses', expensesRouter);
   app.use('/api/workers', workersRouter);
   app.use('/api/reports', reportsRouter);
+  app.use('/api/customers', customersRouter);
+  app.use('/api/attendance', attendanceRouter);
+  app.use('/api/stock-adjustments', stockAdjustmentsRouter);
 
   app.use(notFound);
-  // Sentry needs to see the error before our own handler formats/hides it.
   if (sentryEnabled) Sentry.setupExpressErrorHandler(app);
   app.use(errorHandler);
 

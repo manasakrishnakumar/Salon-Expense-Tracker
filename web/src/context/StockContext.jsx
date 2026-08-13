@@ -10,6 +10,8 @@ export const StockProvider = ({ children }) => {
   const [products, setProducts] = useState([]);
   const [productStockMap, setProductStockMap] = useState({});
   const [restockHistory, setRestockHistory] = useState([]);
+  const [adjustments, setAdjustments] = useState([]);
+  const [reorderSuggestions, setReorderSuggestions] = useState([]);
   const [totalInventoryValue, setTotalInventoryValue] = useState(0);
   const [loading, setLoading] = useState(false);
 
@@ -28,6 +30,8 @@ export const StockProvider = ({ children }) => {
       setProductStockMap(statusRes.stock);
       setTotalInventoryValue(statusRes.totalInventoryValue);
       setRestockHistory(restockRes.restockHistory);
+      setAdjustments(statusRes.adjustments || []);
+      setReorderSuggestions(statusRes.reorderSuggestions || []);
     } catch (error) {
       console.error('Stock load error:', error);
     } finally {
@@ -37,8 +41,18 @@ export const StockProvider = ({ children }) => {
 
   useEffect(() => {
     if (isLoggedIn && user) loadAll();
-    else { setProducts([]); setProductStockMap({}); setRestockHistory([]); setTotalInventoryValue(0); }
+    else { setProducts([]); setProductStockMap({}); setRestockHistory([]); setAdjustments([]); setReorderSuggestions([]); setTotalInventoryValue(0); }
   }, [isLoggedIn, user, loadAll]);
+
+  const addAdjustment = async (data) => {
+    try {
+      await apiPost('/api/stock-adjustments', data);
+      await loadAll();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  };
 
   const addRestock = async ({ productName, quantityAdded, unit, purchasePrice, supplier, date }) => {
     try {
@@ -63,8 +77,8 @@ export const StockProvider = ({ children }) => {
 
   return (
     <StockContext.Provider value={{
-      products, productStockMap, restockHistory, loading,
-      addRestock, getLowStockProducts, getNeverRestockedProducts, getTotalInventoryValue,
+      products, productStockMap, restockHistory, adjustments, reorderSuggestions, loading,
+      addRestock, addAdjustment, getLowStockProducts, getNeverRestockedProducts, getTotalInventoryValue,
       refreshStock: loadAll,
     }}>
       {children}

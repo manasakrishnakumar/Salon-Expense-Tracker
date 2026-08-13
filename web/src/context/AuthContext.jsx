@@ -81,8 +81,27 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const sendRecovery = async (email) => {
+    try {
+      const redirectUrl = `${window.location.origin}?recovery=true`;
+      await account.createRecovery(email, redirectUrl);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  };
+
+  const confirmRecovery = async (userId, secret, newPassword) => {
+    try {
+      await account.updateRecovery(userId, secret, newPassword);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isLoggedIn, loading, login, logout, register, changePassword }}>
+    <AuthContext.Provider value={{ user, isLoggedIn, loading, login, logout, register, changePassword, sendRecovery, confirmRecovery }}>
       {children}
     </AuthContext.Provider>
   );
