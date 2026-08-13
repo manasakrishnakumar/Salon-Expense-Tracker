@@ -6,9 +6,16 @@ function createTransporter() {
   // Gmail App Passwords are displayed with spaces (e.g. "abcd efgh ijkl mnop")
   // but must be used without them — strip any spaces just in case.
   const pass = env.smtp.pass.replace(/\s+/g, '');
+  // Use explicit host + port 587 (STARTTLS) instead of service:'gmail'
+  // because cloud hosts like Render often block outbound port 465 (SSL).
   return nodemailer.createTransport({
-    service: 'gmail',
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false, // STARTTLS — upgrades after connection
     auth: { user: env.smtp.user, pass },
+    tls: {
+      rejectUnauthorized: false, // allow self-signed certs in some proxied envs
+    },
   });
 }
 
@@ -19,10 +26,16 @@ async function send(to, subject, html) {
     return false;
   }
   try {
-    await transporter.sendMail({ from: `"Salon Pro" <${env.smtp.from}>`, to, subject, html });
+    const info = await transporter.sendMail({
+      from: `"Salon Pro" <${env.smtp.from}>`,
+      to,
+      subject,
+      html,
+    });
+    console.log('[email] Sent to', to, '— messageId:', info.messageId);
     return true;
   } catch (err) {
-    console.error('[email] Failed to send email to', to, ':', err.message);
+    console.error('[email] FAILED to send to', to, '| Error:', err.message, '| Code:', err.code);
     return false;
   }
 }
