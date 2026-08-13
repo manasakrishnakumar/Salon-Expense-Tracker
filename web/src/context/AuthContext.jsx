@@ -41,9 +41,10 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       await account.createEmailPasswordSession(email, password);
-      setUser(await loadUserWithPrefs());
+      const loadedUser = await loadUserWithPrefs();
+      setUser(loadedUser);
       setIsLoggedIn(true);
-      return { success: true };
+      return { success: true, user: loadedUser };
     } catch (error) {
       return { success: false, error: error.message };
     }
@@ -52,8 +53,8 @@ export const AuthProvider = ({ children }) => {
   const register = async (email, password, name) => {
     try {
       await account.create(ID.unique(), email, password, name);
-      await login(email, password);
-      return { success: true };
+      const result = await login(email, password);
+      return result;
     } catch (error) {
       return { success: false, error: error.message };
     }
