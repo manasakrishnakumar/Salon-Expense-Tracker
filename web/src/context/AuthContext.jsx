@@ -71,8 +71,17 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+  const changePassword = async (newPassword, oldPassword) => {
+    try {
+      await account.updatePassword(newPassword, oldPassword);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, isLoggedIn, loading, login, logout, register }}>
+    <AuthContext.Provider value={{ user, isLoggedIn, loading, login, logout, register, changePassword }}>
       {children}
     </AuthContext.Provider>
   );
