@@ -29,4 +29,11 @@ export const env = {
     auditLog: process.env.COLLECTION_AUDIT_LOG || 'audit_log',
     servicePrices: process.env.COLLECTION_SERVICE_PRICES || 'service_prices',
   },
+
+  // SMTP for sending worker invite emails (optional — if unset, email is skipped)
+  smtp: {
+    user: process.env.SMTP_USER || null,
+    pass: process.env.SMTP_PASS || null,
+    from: process.env.SMTP_FROM || process.env.SMTP_USER || null,
+  },
 };

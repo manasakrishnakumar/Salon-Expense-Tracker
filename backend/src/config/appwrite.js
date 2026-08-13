@@ -1,4 +1,4 @@
-import { Client, Databases, Users, ID, Query } from 'node-appwrite';
+import { Client, Databases, Users, Messaging, ID, Query } from 'node-appwrite';
 import { env } from './env.js';
 
 /**
@@ -26,4 +26,5 @@ export function clientAsUser(jwt) {
 
 export const databases = new Databases(serverClient);
 export const users = new Users(serverClient);
+export const messaging = new Messaging(serverClient);
 export { ID, Query };

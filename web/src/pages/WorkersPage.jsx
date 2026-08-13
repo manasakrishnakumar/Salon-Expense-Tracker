@@ -3,12 +3,6 @@ import { useWorkers } from '../context/WorkersContext';
 import { useServices } from '../context/ServicesContext';
 import { apiPost } from '../lib/api';
 
-function randomTempPassword() {
-  // Not meant to be memorable — the owner hands it over once and the
-  // worker is expected to change it after their first login.
-  return Math.random().toString(36).slice(-6) + Math.floor(Math.random() * 90 + 10);
-}
-
 export default function WorkersPage() {
   const { workers, addWorker, deleteWorker, loading } = useWorkers();
   const { serviceRecords } = useServices();
@@ -17,7 +11,7 @@ export default function WorkersPage() {
   const [error, setError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(null);
 
-  const [invite, setInvite] = useState({ name: '', email: '', password: randomTempPassword() });
+  const [invite, setInvite] = useState({ name: '', email: '' });
   const [inviting, setInviting] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [inviteResult, setInviteResult] = useState(null);
@@ -40,17 +34,16 @@ export default function WorkersPage() {
 
   const handleInvite = async (e) => {
     e.preventDefault();
-    if (!invite.name.trim() || !invite.email.trim() || invite.password.length < 8) return;
+    if (!invite.name.trim() || !invite.email.trim()) return;
     setInviting(true);
     setInviteError('');
     try {
       const result = await apiPost('/api/workers/invite', {
         name: invite.name.trim(),
         email: invite.email.trim(),
-        password: invite.password,
       });
       setInviteResult(result);
-      setInvite({ name: '', email: '', password: randomTempPassword() });
+      setInvite({ name: '', email: '' });
     } catch (err) {
       setInviteError(err.message || 'Failed to invite worker.');
     } finally {
@@ -142,11 +135,15 @@ export default function WorkersPage() {
         {inviteResult && (
           <div className="product-list" style={{ marginTop: 12, marginBottom: 12 }}>
             <div style={{ padding: 12 }}>
-              <div style={{ fontWeight: 700, color: 'var(--success-light)', marginBottom: 6 }}>
-                ✅ {inviteResult.worker.name} can now log in
+              <div style={{ fontWeight: 700, color: inviteResult.emailSent ? 'var(--success-light)' : '#F59E0B', marginBottom: 6 }}>
+                {inviteResult.emailSent ? '✅' : '⚠️'} {inviteResult.worker.name}
               </div>
-              <div className="text-sm">Email: <strong>{inviteResult.worker.email}</strong></div>
-              <div className="text-sm">Temp password: <strong>{inviteResult.tempPassword}</strong></div>
+              <div className="text-sm">
+                {inviteResult.emailSent
+                  ? `Login credentials sent to `
+                  : `Account created for `}
+                <strong>{inviteResult.worker.email}</strong>
+              </div>
               <div className="text-sm text-muted" style={{ marginTop: 6 }}>{inviteResult.note}</div>
             </div>
           </div>
@@ -167,22 +164,13 @@ export default function WorkersPage() {
               onChange={e => setInvite({ ...invite, email: e.target.value })}
             />
           </div>
-          <div style={{ display: 'flex', gap: 12 }}>
-            <input
-              className="form-input"
-              placeholder="Temp password (min 8 chars)"
-              value={invite.password}
-              onChange={e => setInvite({ ...invite, password: e.target.value })}
-              style={{ flex: 1 }}
-            />
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={inviting || !invite.name.trim() || !invite.email.trim() || invite.password.length < 8}
-            >
-              {inviting ? 'Inviting...' : '🔑 Create Login'}
-            </button>
-          </div>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={inviting || !invite.name.trim() || !invite.email.trim()}
+          >
+            {inviting ? 'Sending invite...' : '📧 Send Invite'}
+          </button>
         </form>
       </div>
 

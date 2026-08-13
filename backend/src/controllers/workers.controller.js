@@ -1,5 +1,6 @@
 import { env } from '../config/env.js';
 import { databases, users, ID, Query } from '../config/appwrite.js';
+import { sendWorkerInviteEmail } from '../config/email.js';
 import { createMine, getDoc, updateDoc } from '../repo.js';
 import { HttpError } from '../middleware/errorHandler.js';
 import { recordAudit } from '../audit.js';
@@ -54,30 +55,52 @@ export async function deactivateWorker(req, res) {
 }
 
 /**
- * Gives a real member of staff their own login, scoped to this owner's
- * salon: creates the Appwrite account server-side, then writes
- * {role: 'worker', ownerId} into their prefs BEFORE they ever log in — so
- * requireAuth's bootstrap-as-owner path never fires for them (see
- * middleware/auth.js).
+ * Gives a real member of staff their own login, scoped to this owner's salon.
+ * - Password is generated SERVER-SIDE — never sent back to the admin.
+ * - Credentials are emailed directly to the worker via Gmail SMTP (Nodemailer).
+ * - The worker is prompted in the email to change their password after first login.
  *
- * We have no email service wired up, so the temp password is returned in
- * the response for the owner to hand over directly; the worker should
- * change it after first login.
+ * Requires SMTP_USER and SMTP_PASS env vars to be set on the server.
  */
 export async function inviteWorker(req, res) {
-  const { name, email, password } = req.body;
+  const { name, email } = req.body;
 
-  const newUser = await users.create(ID.unique(), email, undefined, password, name);
+  if (!name || !email) {
+    throw new HttpError(400, 'name and email are required');
+  }
+
+  // Generate a secure temp password server-side — admin never sees this
+  const tempPassword =
+    Math.random().toString(36).slice(-5) +
+    Math.random().toString(36).slice(-5).toUpperCase() +
+    Math.floor(Math.random() * 90 + 10);
+
+  // Create the Appwrite account
+  const newUser = await users.create(ID.unique(), email, undefined, tempPassword, name);
+  // Tag them as a worker scoped to this owner, before they ever log in
   await users.updatePrefs(newUser.$id, { role: 'worker', ownerId: req.user.ownerId });
+
+  // Send credentials directly to the worker's email
+  const loginUrl = env.corsOrigin;
+  const emailSent = await sendWorkerInviteEmail({
+    toEmail: email,
+    toName: name,
+    password: tempPassword,
+    loginUrl,
+  });
 
   await recordAudit(req.user, 'worker.invite', {
     targetId: newUser.$id,
-    message: `Invited ${email} as a worker`,
+    message: emailSent
+      ? `Invited ${email} as a worker — credentials emailed directly to them`
+      : `Invited ${email} as a worker — email delivery skipped (SMTP not configured)`,
   });
 
   res.status(201).json({
     worker: { id: newUser.$id, name: newUser.name, email: newUser.email },
-    tempPassword: password,
-    note: 'Share these credentials with the worker directly — they should change their password after first login.',
+    emailSent,
+    note: emailSent
+      ? `✅ Login credentials have been sent directly to ${email}. They should log in and change their password.`
+      : `⚠️ Account created but email could not be sent — SMTP not configured. Please set SMTP_USER and SMTP_PASS in your Render environment variables.`,
   });
 }
