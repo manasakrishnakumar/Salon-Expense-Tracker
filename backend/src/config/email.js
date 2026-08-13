@@ -1,43 +1,61 @@
 import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { env } from './env.js';
 
-function createTransporter() {
-  if (!env.smtp.user || !env.smtp.pass) return null;
-  // Gmail App Passwords are displayed with spaces (e.g. "abcd efgh ijkl mnop")
-  // but must be used without them — strip any spaces just in case.
-  const pass = env.smtp.pass.replace(/\s+/g, '');
-  // Use explicit host + port 587 (STARTTLS) instead of service:'gmail'
-  // because cloud hosts like Render often block outbound port 465 (SSL).
-  return nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 587,
-    secure: false, // STARTTLS — upgrades after connection
-    auth: { user: env.smtp.user, pass },
-    tls: {
-      rejectUnauthorized: false, // allow self-signed certs in some proxied envs
-    },
-  });
-}
+/**
+ * Send an email using Resend (preferred — works from cloud hosts like Render)
+ * or fall back to Nodemailer/Gmail SMTP if RESEND_API_KEY is not set.
+ *
+ * Gmail SMTP from shared cloud IPs is silently blocked by Gmail.
+ * Resend uses properly configured SPF/DKIM so emails actually arrive.
+ */
 
-async function send(to, subject, html) {
-  const transporter = createTransporter();
-  if (!transporter) {
-    console.warn('[email] SMTP not configured — skipping email to', to);
+async function sendViaResend(to, subject, html) {
+  const resend = new Resend(env.resendApiKey);
+  // 'onboarding@resend.dev' is Resend's verified sender — works without a custom domain
+  const from = 'Salon Pro <onboarding@resend.dev>';
+  const { data, error } = await resend.emails.send({ from, to, subject, html });
+  if (error) {
+    console.error('[email/resend] Failed:', error);
     return false;
   }
+  console.log('[email/resend] Sent to', to, '— id:', data.id);
+  return true;
+}
+
+async function sendViaSmtp(to, subject, html) {
+  if (!env.smtp.user || !env.smtp.pass) return false;
+  const pass = env.smtp.pass.replace(/\s+/g, '');
+  const transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    auth: { user: env.smtp.user, pass },
+    tls: { rejectUnauthorized: false },
+  });
   try {
     const info = await transporter.sendMail({
       from: `"Salon Pro" <${env.smtp.from}>`,
-      to,
-      subject,
-      html,
+      to, subject, html,
     });
-    console.log('[email] Sent to', to, '— messageId:', info.messageId);
+    console.log('[email/smtp] Sent to', to, '— messageId:', info.messageId);
     return true;
   } catch (err) {
-    console.error('[email] FAILED to send to', to, '| Error:', err.message, '| Code:', err.code);
+    console.error('[email/smtp] FAILED to send to', to, '| Error:', err.message, '| Code:', err.code);
     return false;
   }
+}
+
+async function send(to, subject, html) {
+  // Prefer Resend (reliable from cloud) — fall back to SMTP
+  if (env.resendApiKey) {
+    return sendViaResend(to, subject, html);
+  }
+  if (env.smtp.user && env.smtp.pass) {
+    return sendViaSmtp(to, subject, html);
+  }
+  console.warn('[email] No email provider configured — skipping email to', to);
+  return false;
 }
 
 // ── Worker Invite ────────────────────────────────────────────────────────────

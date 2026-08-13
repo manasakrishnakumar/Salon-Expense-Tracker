@@ -39,4 +39,7 @@ export const env = {
     pass: process.env.SMTP_PASS || null,
     from: process.env.SMTP_FROM || process.env.SMTP_USER || null,
   },
+
+  // Resend transactional email (preferred over SMTP for cloud deployments)
+  resendApiKey: process.env.RESEND_API_KEY || null,
 };
