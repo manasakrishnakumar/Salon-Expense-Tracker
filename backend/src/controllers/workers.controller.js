@@ -80,10 +80,9 @@ export async function inviteWorker(req, res) {
   try {
     newUser = await users.create(ID.unique(), email, undefined, tempPassword, name);
   } catch (err) {
-    // Appwrite throws 409 when the email is already registered
     const status = err?.code === 409 ? 409 : 500;
     const message = err?.code === 409
-      ? `An account for ${email} already exists. If this worker has lost access, ask them to use "Forgot Password" on the login page.`
+      ? `An account for ${email} already exists. Ask them to use "Forgot Password" on the login page.`
       : `Failed to create account: ${err?.message || 'Unknown error'}`;
     return res.status(status).json({ error: message });
   }
@@ -91,27 +90,40 @@ export async function inviteWorker(req, res) {
   // Tag them as a worker scoped to this owner, before they ever log in
   await users.updatePrefs(newUser.$id, { role: 'worker', ownerId: req.user.ownerId });
 
-  // Send credentials directly to the worker's email
-  const loginUrl = env.corsOrigin;
-  const emailSent = await sendWorkerInviteEmail({
-    toEmail: email,
-    toName: name,
-    password: tempPassword,
-    loginUrl,
-  });
+  // ── Send invite email via Appwrite's built-in magic URL system ──────────
+  // Appwrite sends from their own verified servers → arrives in any inbox.
+  // The worker clicks the link, lands on the login page, and is auto-logged in.
+  // They then use "Change Password" to set a permanent password.
+  const redirectUrl = `${env.corsOrigin}?magic=1&invited=1`;
+  let emailSent = false;
+  try {
+    await users.createMagicURLToken(newUser.$id, email, redirectUrl, false);
+    emailSent = true;
+    console.log('[invite] Appwrite magic URL email sent to', email);
+  } catch (magicErr) {
+    console.error('[invite] Appwrite magic URL failed:', magicErr.message, '— falling back to SMTP/Resend');
+    // Fallback: send credentials via Resend/SMTP
+    emailSent = await sendWorkerInviteEmail({
+      toEmail: email,
+      toName: name,
+      password: tempPassword,
+      loginUrl: env.corsOrigin,
+    });
+  }
 
   await recordAudit(req.user, 'worker.invite', {
     targetId: newUser.$id,
     message: emailSent
-      ? `Invited ${email} as a worker — credentials emailed directly to them`
-      : `Invited ${email} as a worker — email delivery skipped (SMTP not configured)`,
+      ? `Invited ${email} as a worker — login link emailed via Appwrite`
+      : `Invited ${email} as a worker — email delivery failed`,
   });
 
   res.status(201).json({
     worker: { id: newUser.$id, name: newUser.name, email: newUser.email },
     emailSent,
     note: emailSent
-      ? `✅ Login credentials have been sent directly to ${email}. They should log in and change their password.`
-      : `⚠️ Account created successfully but the invite email could not be delivered to ${email}. Please check that your Gmail App Password is correct on Render and that 2-Step Verification is enabled on the Google account.`,
+      ? `✅ An invitation link has been sent to ${email}. They should click the link to log in, then set a permanent password using "Change Password" in the sidebar.`
+      : `⚠️ Account created but the invite email could not be delivered. Please share the login URL manually: ${env.corsOrigin}`,
   });
 }
+
