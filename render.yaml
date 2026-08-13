@@ -9,7 +9,7 @@ services:
     runtime: node
     rootDir: backend
     plan: free
-    buildCommand: npm ci
+    buildCommand: npm install
     startCommand: node src/index.js
     healthCheckPath: /api/health
     envVars:
@@ -51,5 +51,7 @@ services:
         sync: false # set to your Gmail address
       - key: SMTP_PASS
         sync: false # set to your Gmail App Password
+      - key: RESEND_API_KEY
+        sync: false # get free key at resend.com — preferred over SMTP for cloud deployments
       - key: SENTRY_DSN
         sync: false # optional — leave unset to disable
