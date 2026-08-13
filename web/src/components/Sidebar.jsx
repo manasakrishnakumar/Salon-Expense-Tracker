@@ -3,12 +3,13 @@ import { useAuth } from '../context/AuthContext';
 import ThemeToggle from './ThemeToggle';
 
 const NAV_ITEMS = [
-  { id: 'dashboard', label: 'Dashboard', icon: '🏠', ownerOnly: true },
-  { id: 'services', label: 'Services', icon: '✂️' },
-  { id: 'stock', label: 'Inventory', icon: '📦', ownerOnly: true },
-  { id: 'workers', label: 'Workers', icon: '👥', ownerOnly: true },
-  { id: 'customers', label: 'Customers', icon: '👤', ownerOnly: true },
-  { id: 'analysis', label: 'Analysis', icon: '📊', ownerOnly: true },
+  { id: 'dashboard',    label: 'Dashboard',   icon: '🏠', ownerOnly: true },
+  { id: 'my-dashboard', label: 'My Dashboard', icon: '🏠', workerOnly: true },
+  { id: 'services',    label: 'Services',     icon: '✂️' },
+  { id: 'stock',       label: 'Inventory',    icon: '📦', ownerOnly: true },
+  { id: 'workers',     label: 'Workers',      icon: '👥', ownerOnly: true },
+  { id: 'customers',   label: 'Customers',    icon: '👤', ownerOnly: true },
+  { id: 'analysis',    label: 'Analysis',     icon: '📊', ownerOnly: true },
 ];
 
 export default function Sidebar({ activePage, onNavigate }) {
@@ -21,8 +22,13 @@ export default function Sidebar({ activePage, onNavigate }) {
   const [cpSuccess, setCpSuccess] = useState(false);
   const [cpLoading, setCpLoading] = useState(false);
 
+  const isOwner = user?.role === 'owner';
   const initial = user?.name ? user.name[0].toUpperCase() : 'U';
-  const navItems = NAV_ITEMS.filter(item => !item.ownerOnly || user?.role === 'owner');
+  const navItems = NAV_ITEMS.filter(item => {
+    if (item.ownerOnly) return isOwner;
+    if (item.workerOnly) return !isOwner;
+    return true;
+  });
 
   const handleCP = async (e) => {
     e.preventDefault();

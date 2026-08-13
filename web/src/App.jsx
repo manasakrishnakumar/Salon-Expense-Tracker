@@ -14,6 +14,7 @@ import StockPage from './pages/StockPage';
 import WorkersPage from './pages/WorkersPage';
 import AnalysisPage from './pages/AnalysisPage';
 import CustomersPage from './pages/CustomersPage';
+import WorkerDashboardPage from './pages/WorkerDashboardPage';
 
 const OWNER_ONLY_PAGES = new Set(['dashboard', 'stock', 'workers', 'analysis', 'customers']);
 
@@ -22,7 +23,7 @@ function AppContent() {
   const [activePage, setActivePage] = useState('dashboard');
   const isWorker = user?.role === 'worker';
 
-  const effectivePage = isWorker && OWNER_ONLY_PAGES.has(activePage) ? 'services' : activePage;
+  const effectivePage = isWorker && OWNER_ONLY_PAGES.has(activePage) ? 'my-dashboard' : activePage;
 
   if (loading) {
     return (
@@ -42,13 +43,14 @@ function AppContent() {
 
   const renderPage = () => {
     switch (effectivePage) {
-      case 'dashboard':  return <DashboardPage onNavigate={setActivePage} />;
-      case 'services':   return <ServicesPage />;
-      case 'stock':      return <StockPage />;
-      case 'workers':    return <WorkersPage />;
-      case 'analysis':   return <AnalysisPage />;
-      case 'customers':  return <CustomersPage />;
-      default:           return <DashboardPage onNavigate={setActivePage} />;
+      case 'dashboard':     return <DashboardPage onNavigate={setActivePage} />;
+      case 'my-dashboard':  return <WorkerDashboardPage />;
+      case 'services':      return <ServicesPage />;
+      case 'stock':         return <StockPage />;
+      case 'workers':       return <WorkersPage />;
+      case 'analysis':      return <AnalysisPage />;
+      case 'customers':     return <CustomersPage />;
+      default:              return isWorker ? <WorkerDashboardPage /> : <DashboardPage onNavigate={setActivePage} />;
     }
   };
 

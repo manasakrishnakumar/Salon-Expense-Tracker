@@ -345,7 +345,7 @@ export default function ServicesPage() {
                     </div>
                     <div className="transaction-right">
                       <div className="transaction-amount" style={{ color: 'var(--success-light)' }}>
-                        +₹{(record.totalPrice || record.totalCost || 0).toLocaleString('en-IN')}
+                        +₹{(record.totalPrice || 0).toLocaleString('en-IN')}
                       </div>
                       <button
                         className="btn btn-icon"
