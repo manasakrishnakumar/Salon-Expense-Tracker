@@ -1,0 +1,34 @@
+{
+  "name": "salon-pro-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Express API layer for Salon Pro. Owns business logic (cost calculation, stock deduction, RBAC, forecasting) in front of Appwrite, which is used purely as the data store.",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js",
+    "setup:appwrite": "node scripts/setupAppwriteSchema.js",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
+    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch"
+  },
+  "dependencies": {
+    "@sentry/node": "^10.69.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.4.1",
+    "helmet": "^8.0.0",
+    "morgan": "^1.10.0",
+    "node-appwrite": "^14.1.0",
+    "pdfkit": "^0.19.1",
+    "swagger-ui-express": "^5.0.1",
+    "yaml": "^2.9.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.7",
+    "supertest": "^7.0.0"
+  }
+}

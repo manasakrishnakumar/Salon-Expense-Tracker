@@ -1,0 +1,45 @@
+# Render "Blueprint" for the backend API. Deploy: connect this repo at
+# render.com/blueprints and Render reads this file automatically.
+# `sync: false` means Render prompts for that value in its dashboard
+# instead of it living in this (committed, public) file — used for
+# everything secret.
+services:
+  - type: web
+    name: salon-pro-backend
+    runtime: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm ci
+    startCommand: node src/index.js
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 4000
+      - key: CORS_ORIGIN
+        sync: false # set to the deployed web app's real origin
+      - key: APPWRITE_ENDPOINT
+        sync: false
+      - key: APPWRITE_PROJECT_ID
+        sync: false
+      - key: APPWRITE_API_KEY
+        sync: false
+      - key: APPWRITE_DATABASE_ID
+        sync: false
+      - key: COLLECTION_EXPENSES
+        value: expenses
+      - key: COLLECTION_SERVICE_RECORDS
+        value: service_record
+      - key: COLLECTION_RESTOCK
+        value: restock_history
+      - key: COLLECTION_WORKERS
+        value: workers
+      - key: COLLECTION_PRODUCTS
+        value: products
+      - key: COLLECTION_AUDIT_LOG
+        value: audit_log
+      - key: COLLECTION_SERVICE_PRICES
+        value: service_prices
+      - key: SENTRY_DSN
+        sync: false # optional — leave unset to disable

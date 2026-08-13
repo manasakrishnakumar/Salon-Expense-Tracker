@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salon Expenses Analyser</title>
+    <script>
+        // Immediate authentication check
+        if (localStorage.getItem('isLoggedIn') !== 'true') {
+            window.location.href = 'login.html';
+        }
+    </script>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="header-top">
+                <h1>💇 Salon Expenses Analyser</h1>
+                <button id="logoutBtn" class="btn-logout" title="Logout">
+                    <i class="fas fa-sign-out-alt"></i> Logout
+                </button>
+            </div>
+            <p class="subtitle">Track and analyze your salon expenses</p>
+        </header>
+
+        <main>
+            <!-- Add Expense Form -->
+            <section class="card">
+                <h2>Add New Expense</h2>
+                <form id="expenseForm">
+                    <div class="form-group">
+                        <label for="expenseName">Expense Name</label>
+                        <input type="text" id="expenseName" placeholder="e.g., Hair Products" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="category">Category</label>
+                        <select id="category" required>
+                            <option value="">Select Category</option>
+                            <option value="products">Products</option>
+                            <option value="equipment">Equipment</option>
+                            <option value="utilities">Utilities</option>
+                            <option value="rent">Rent</option>
+                            <option value="salaries">Salaries</option>
+                            <option value="marketing">Marketing</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="amount">Amount (₹)</label>
+                        <input type="number" id="amount" placeholder="0.00" step="0.01" min="0" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="date">Date</label>
+                        <input type="date" id="date" required>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Add Expense</button>
+                </form>
+            </section>
+
+            <!-- Summary Section -->
+            <section class="card summary-section">
+                <h2>Expense Summary</h2>
+                <div class="summary-grid">
+                    <div class="summary-item">
+                        <span class="summary-label">Total Expenses</span>
+                        <span class="summary-value" id="totalExpenses">₹0.00</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">This Month</span>
+                        <span class="summary-value" id="monthlyExpenses">₹0.00</span>
+                    </div>
+                    <div class="summary-item">
+                        <span class="summary-label">Total Entries</span>
+                        <span class="summary-value" id="totalEntries">0</span>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Expenses List -->
+            <section class="card">
+                <h2>Recent Expenses</h2>
+                <div id="expensesList" class="expenses-list">
+                    <p class="empty-state">No expenses added yet. Add your first expense above!</p>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>

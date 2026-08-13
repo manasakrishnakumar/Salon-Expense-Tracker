@@ -1,0 +1,10 @@
+# Local convenience only — production hosting (Render/Railway/etc.) runs
+# the image directly with its own env var / secret mechanism, not compose.
+services:
+  backend:
+    build: .
+    ports:
+      - "4000:4000"
+    env_file:
+      - .env # gitignored — copy .env.example and fill in real values
+    restart: unless-stopped

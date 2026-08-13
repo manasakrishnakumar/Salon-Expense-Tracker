@@ -1,0 +1,697 @@
+openapi: 3.0.3
+info:
+  title: Salon Pro API
+  description: >
+    REST API for Salon Pro. Owns all business logic (cost/price calculation,
+    stock computation, RBAC, forecasting) in front of Appwrite, which is
+    used purely as the data store. See ../docs/architecture.md for the
+    full design rationale.
+  version: "4.0.0"
+  license:
+    name: UNLICENSED
+servers:
+  - url: http://localhost:4000
+    description: Local development
+security:
+  - bearerAuth: []
+tags:
+  - name: Health
+  - name: Services & Pricing
+  - name: Service Records
+  - name: Stock
+  - name: Restock
+  - name: Expenses
+  - name: Workers
+  - name: Reports
+
+paths:
+  /api/health:
+    get:
+      tags: [Health]
+      summary: Liveness check
+      security: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+                  service: { type: string }
+                  time: { type: string, format: date-time }
+
+  /api/services:
+    get:
+      tags: [Services & Pricing]
+      summary: List the service catalog (worker responses have cost/margin stripped)
+      parameters:
+        - in: query
+          name: category
+          schema: { type: string, enum: [facials, cleanups, pedicure_manicure, hair_services, other] }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  services:
+                    type: array
+                    items: { $ref: "#/components/schemas/Service" }
+                  count: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/services/{id}:
+    get:
+      tags: [Services & Pricing]
+      summary: Get one service by id
+      parameters:
+        - $ref: "#/components/parameters/ServiceId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  service: { $ref: "#/components/schemas/Service" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/services/{id}/price:
+    put:
+      tags: [Services & Pricing]
+      summary: Set this owner's price for a service (owner-only)
+      parameters:
+        - $ref: "#/components/parameters/ServiceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [price]
+              properties:
+                price: { type: number, minimum: 0 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  price: { $ref: "#/components/schemas/ServicePrice" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/services/prices:
+    put:
+      tags: [Services & Pricing]
+      summary: Bulk-set prices (owner-only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prices]
+              properties:
+                prices:
+                  type: array
+                  minItems: 1
+                  maxItems: 200
+                  items:
+                    type: object
+                    required: [serviceId, price]
+                    properties:
+                      serviceId: { type: string }
+                      price: { type: number, minimum: 0 }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  prices:
+                    type: array
+                    items: { $ref: "#/components/schemas/ServicePrice" }
+                  count: { type: integer }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/service-records:
+    get:
+      tags: [Service Records]
+      summary: List service records (owner sees all; worker sees only their own)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  records:
+                    type: array
+                    items: { $ref: "#/components/schemas/ServiceRecord" }
+                  count: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+    post:
+      tags: [Service Records]
+      summary: Record a service performed (cost/price computed server-side)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serviceId]
+              properties:
+                serviceId: { type: string }
+                quantity: { type: integer, minimum: 1, maximum: 1000, default: 1 }
+                workerName: { type: string, maxLength: 120 }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  record: { $ref: "#/components/schemas/ServiceRecord" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/service-records/{id}/invoice:
+    get:
+      tags: [Service Records]
+      summary: Download a PDF receipt for a record
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: PDF file
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/service-records/{id}:
+    delete:
+      tags: [Service Records]
+      summary: Delete a record (owner-only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/products/status:
+    get:
+      tags: [Stock]
+      summary: Computed stock status per product (owner-only)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  products: { type: array, items: { $ref: "#/components/schemas/ProductMaster" } }
+                  stock: { type: object, additionalProperties: { $ref: "#/components/schemas/ProductStock" } }
+                  totalInventoryValue: { type: number }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/products/low-stock:
+    get:
+      tags: [Stock]
+      summary: Products below their low-stock threshold, and never-restocked products (owner-only)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lowStock: { type: array, items: { $ref: "#/components/schemas/ProductStock" } }
+                  neverRestocked: { type: array, items: { $ref: "#/components/schemas/ProductStock" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/restock:
+    get:
+      tags: [Restock]
+      summary: List restock history (owner-only)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  restockHistory: { type: array, items: { $ref: "#/components/schemas/Restock" } }
+                  count: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Restock]
+      summary: Add stock (owner-only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productName, quantityAdded]
+              properties:
+                productName: { type: string }
+                quantityAdded: { type: number, exclusiveMinimum: 0 }
+                unit: { type: string, enum: [g, ml, pcs], default: g }
+                purchasePrice: { type: number, minimum: 0, default: 0 }
+                supplier: { type: string }
+                date: { type: string, format: date }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  restock: { $ref: "#/components/schemas/Restock" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/expenses:
+    get:
+      tags: [Expenses]
+      summary: List expenses (owner-only)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  expenses: { type: array, items: { $ref: "#/components/schemas/Expense" } }
+                  count: { type: integer }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Expenses]
+      summary: Add an expense (owner-only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, amount, category, date]
+              properties:
+                name: { type: string }
+                amount: { type: number, exclusiveMinimum: 0 }
+                category: { type: string }
+                date: { type: string, format: date }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  expense: { $ref: "#/components/schemas/Expense" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/expenses/{id}:
+    delete:
+      tags: [Expenses]
+      summary: Delete an expense (owner-only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "204": { description: Deleted }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/workers:
+    get:
+      tags: [Workers]
+      summary: List active staff attribution names (owner-only)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  workers: { type: array, items: { $ref: "#/components/schemas/Worker" } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [Workers]
+      summary: Add a plain attribution name, no login (owner-only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string, maxLength: 120 }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  worker: { $ref: "#/components/schemas/Worker" }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Worker already exists }
+
+  /api/workers/{id}:
+    delete:
+      tags: [Workers]
+      summary: Soft-delete (deactivate) a staff attribution name (owner-only)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  worker: { $ref: "#/components/schemas/Worker" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/workers/invite:
+    post:
+      tags: [Workers]
+      summary: Create a real login for a staff member (owner-only, rate-limited)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, password]
+              properties:
+                name: { type: string, maxLength: 120 }
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8, maxLength: 256 }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  worker:
+                    type: object
+                    properties:
+                      id: { type: string }
+                      name: { type: string }
+                      email: { type: string }
+                  tempPassword: { type: string }
+                  note: { type: string }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "429": { description: Rate limited (20/hour) }
+
+  /api/reports/daily:
+    get:
+      tags: [Reports]
+      summary: Daily report (owner-only)
+      parameters:
+        - in: query
+          name: date
+          required: true
+          schema: { type: string, format: date }
+      responses:
+        "200": { description: OK }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/reports/monthly:
+    get:
+      tags: [Reports]
+      summary: Monthly report (owner-only)
+      parameters:
+        - in: query
+          name: month
+          required: true
+          schema: { type: integer, minimum: 1, maximum: 12 }
+        - in: query
+          name: year
+          required: true
+          schema: { type: integer, minimum: 2000, maximum: 2100 }
+      responses:
+        "200": { description: OK }
+        "400": { $ref: "#/components/responses/ValidationError" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/reports/most-used-products:
+    get:
+      tags: [Reports]
+      summary: Products ranked by total quantity consumed (owner-only)
+      responses:
+        "200": { description: OK }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/reports/forecast:
+    get:
+      tags: [Reports]
+      summary: Next-month expense/cost projection + stock runout prediction (owner-only)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  expenseForecast: { $ref: "#/components/schemas/Forecast" }
+                  serviceCostForecast: { $ref: "#/components/schemas/Forecast" }
+                  stockRunout:
+                    type: array
+                    items: { $ref: "#/components/schemas/StockRunout" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: "Appwrite JWT (account.createJWT())"
+
+  parameters:
+    ServiceId:
+      in: path
+      name: id
+      required: true
+      schema: { type: string }
+
+  responses:
+    Unauthorized:
+      description: Missing/invalid/expired JWT
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Authenticated, but the caller's role isn't permitted
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    ValidationError:
+      description: Request body/query failed zod validation
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error: { type: string, example: "Validation failed" }
+              details: { type: object }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+
+    Service:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        category: { type: string }
+        cost:
+          type: number
+          nullable: true
+          description: Only present for an owner — stripped entirely from a worker's response.
+        price:
+          type: number
+          nullable: true
+          description: null until this owner has set a price for the service.
+        products:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              quantity: { type: string, example: "10g" }
+              cost:
+                type: number
+                description: Owner-only — absent for a worker.
+
+    ServicePrice:
+      type: object
+      properties:
+        ownerId: { type: string }
+        serviceId: { type: string }
+        price: { type: number }
+
+    ServiceRecord:
+      type: object
+      properties:
+        "$id": { type: string }
+        userID: { type: string, description: The salon (tenant), not necessarily the actor }
+        userName: { type: string }
+        serviceID: { type: string }
+        serviceName: { type: string }
+        category: { type: string }
+        unitCost: { type: number }
+        totalCost: { type: number }
+        unitPrice: { type: number }
+        totalPrice: { type: number }
+        quantity: { type: integer }
+        WorkerName: { type: string }
+        Date: { type: string, format: date-time }
+        recordedByUserId: { type: string }
+        recordedByName: { type: string }
+
+    ProductMaster:
+      type: object
+      properties:
+        name: { type: string }
+        unit: { type: string, enum: [g, ml, pcs] }
+        lowStockThreshold: { type: number }
+
+    ProductStock:
+      allOf:
+        - $ref: "#/components/schemas/ProductMaster"
+        - type: object
+          properties:
+            totalRestocked: { type: number }
+            totalUsed: { type: number }
+            remaining: { type: number }
+            isLowStock: { type: boolean }
+            neverRestocked: { type: boolean }
+            usedPercent: { type: number }
+
+    Restock:
+      type: object
+      properties:
+        "$id": { type: string }
+        userID: { type: string }
+        productName: { type: string }
+        quantityAdded: { type: number }
+        unit: { type: string }
+        purchasePrice: { type: number }
+        supplier: { type: string }
+        date: { type: string, format: date }
+
+    Expense:
+      type: object
+      properties:
+        "$id": { type: string }
+        userID: { type: string }
+        userName: { type: string }
+        userEmail: { type: string }
+        name: { type: string }
+        amount: { type: number }
+        category: { type: string }
+        date: { type: string, format: date }
+
+    Worker:
+      type: object
+      properties:
+        "$id": { type: string }
+        userID: { type: string }
+        name: { type: string }
+        isActive: { type: boolean }
+
+    Forecast:
+      type: object
+      properties:
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              month: { type: string, example: "2026-07" }
+              total: { type: number }
+        predictedNextMonth: { type: number }
+        method: { type: string, enum: [insufficient-data, naive-last-month, linear-regression] }
+
+    StockRunout:
+      type: object
+      properties:
+        name: { type: string }
+        remaining: { type: number }
+        unit: { type: string }
+        dailyConsumptionRate: { type: number }
+        daysUntilEmpty: { type: integer }
