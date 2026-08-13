@@ -326,21 +326,34 @@ export default function WorkersPage() {
 
           {/* Invite Worker */}
           <div className="card">
-            <h3 className="section-label">✉️ Invite Worker (With Login)</h3>
+            <h3 className="section-label">🔐 Give Worker a Login</h3>
             <p className="text-sm text-muted" style={{ marginBottom: 12 }}>
-              A temporary password will be sent directly to the worker's email. They'll be prompted to change it on first login.
+              Creates an account with a temporary password. Share the credentials with the worker — they can change their password after logging in.
             </p>
             {inviteResult ? (
-              <div style={{ background: 'rgba(16,185,129,0.1)', border: '1px solid #10B981', borderRadius: 8, padding: 14, color: '#10B981', fontSize: 14 }}>
-                ✅ <strong>{inviteResult.worker?.name}</strong> has been invited! Login credentials sent to <strong>{inviteResult.worker?.email}</strong>.
-                <button className="btn btn-ghost btn-sm" style={{ marginLeft: 16 }} onClick={() => setInviteResult(null)}>+ Invite Another</button>
+              <div style={{ background: 'rgba(139,92,246,0.08)', border: '1px solid var(--primary)', borderRadius: 12, padding: 18 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 14, color: 'var(--text)' }}>✅ Account created for <strong>{inviteResult.worker?.name}</strong></div>
+                <p className="text-sm text-muted" style={{ marginBottom: 14 }}>Share these credentials with the worker. They must change their password after the first login.</p>
+                {[{ label: 'Email', value: inviteResult.worker?.email }, { label: 'Temporary Password', value: inviteResult.tempPassword }].map(({ label, value }) => (
+                  <div key={label} style={{ background: 'var(--bg-input)', borderRadius: 8, padding: '10px 14px', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                    <div>
+                      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 2 }}>{label}</div>
+                      <code style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', letterSpacing: label === 'Temporary Password' ? '0.08em' : 0 }}>{value}</code>
+                    </div>
+                    <button className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }} onClick={() => navigator.clipboard.writeText(value || '')} title="Copy">📋 Copy</button>
+                  </div>
+                ))}
+                <div style={{ background: '#FEF3C722', border: '1px solid #F59E0B44', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
+                  <span style={{ fontSize: 13, color: '#F59E0B' }}>⚠️ Save these now — the password cannot be retrieved again after you close this.</span>
+                </div>
+                <button className="btn btn-ghost btn-sm" onClick={() => setInviteResult(null)}>+ Create Another Login</button>
               </div>
             ) : (
               <form onSubmit={handleInvite} style={{ display: 'grid', gap: 10 }}>
                 <input className="form-input" placeholder="Worker name" value={invite.name} onChange={e => setInvite({ ...invite, name: e.target.value })} required />
-                <input className="form-input" type="email" placeholder="Worker email" value={invite.email} onChange={e => setInvite({ ...invite, email: e.target.value })} required />
+                <input className="form-input" type="email" placeholder="Worker email (used to log in)" value={invite.email} onChange={e => setInvite({ ...invite, email: e.target.value })} required />
                 {inviteError && <div className="login-error">{inviteError}</div>}
-                <button type="submit" className="btn btn-primary" style={{ width: 'fit-content' }} disabled={inviting}>{inviting ? 'Sending invite…' : '📧 Send Invite'}</button>
+                <button type="submit" className="btn btn-primary" style={{ width: 'fit-content' }} disabled={inviting}>{inviting ? 'Creating account…' : '🔐 Create Login'}</button>
               </form>
             )}
           </div>

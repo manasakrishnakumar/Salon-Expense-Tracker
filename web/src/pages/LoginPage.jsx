@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { account } from '../lib/appwrite';
 
 export default function LoginPage() {
   const { login, register, logout, sendRecovery, confirmRecovery } = useAuth();
@@ -13,34 +12,9 @@ export default function LoginPage() {
   const [success, setSuccess] = useState('');
   const [recoveryParams, setRecoveryParams] = useState(null);
 
-  const [magicLoading, setMagicLoading] = useState(false);
-
-  // Check URL for recovery redirect from Appwrite email link
+  // Check URL for password recovery redirect from Appwrite email link
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-
-    // Handle worker magic URL invite link (?magic=1&userId=xxx&secret=xxx)
-    if (params.get('magic') === '1') {
-      const userId = params.get('userId');
-      const secret = params.get('secret');
-      if (userId && secret) {
-        setMagicLoading(true);
-        account.updateMagicURLSession(userId, secret)
-          .then(() => {
-            // Clean up URL and reload so AuthContext picks up the session
-            window.history.replaceState({}, '', window.location.pathname);
-            window.location.reload();
-          })
-          .catch(err => {
-            setMagicLoading(false);
-            setError('The invite link has expired or is invalid. Please ask your admin to send a new invite.');
-            console.error('[magic-login]', err.message);
-          });
-      }
-      return;
-    }
-
-    // Handle password recovery redirect
     if (params.get('recovery') === 'true') {
       const userId = params.get('userId');
       const secret = params.get('secret');
@@ -131,17 +105,8 @@ export default function LoginPage() {
       <div className="login-blob" style={{ width: 300, height: 300, background: 'var(--secondary)', bottom: -80, right: -60 }} />
 
       {/* Magic link loading screen — shown when worker clicks invite link */}
-      {magicLoading && (
-        <div className="login-card animate-slideUp" style={{ textAlign: 'center', padding: '48px 32px' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>🔗</div>
-          <h2 style={{ color: 'var(--text)', marginBottom: 8 }}>Logging you in...</h2>
-          <p style={{ color: 'var(--text-muted)', marginBottom: 24 }}>Verifying your invite link, please wait.</p>
-          <div className="spinner" style={{ margin: '0 auto' }} />
-          {error && <div className="login-error" style={{ marginTop: 24 }}>{error}</div>}
-        </div>
-      )}
 
-      {!magicLoading && <div className="login-card animate-slideUp">
+      <div className="login-card animate-slideUp">
         <div className="login-logo">
           <div className="login-logo-icon">💇</div>
           <h1 className="login-title">Salon Pro</h1>
@@ -234,7 +199,7 @@ export default function LoginPage() {
             <>Already have an account? <a onClick={() => { setMode('login'); setError(''); setSuccess(''); }}>Sign In</a></>
           )}
         </div>
-      </div>}
+      </div>
     </div>
   );
 }
