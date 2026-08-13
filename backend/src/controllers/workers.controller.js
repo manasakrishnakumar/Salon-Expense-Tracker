@@ -112,6 +112,6 @@ export async function inviteWorker(req, res) {
     emailSent,
     note: emailSent
       ? `✅ Login credentials have been sent directly to ${email}. They should log in and change their password.`
-      : `⚠️ Account created but email could not be sent — SMTP not configured. Please set SMTP_USER and SMTP_PASS in your Render environment variables.`,
+      : `⚠️ Account created successfully but the invite email could not be delivered to ${email}. Please check that your Gmail App Password is correct on Render and that 2-Step Verification is enabled on the Google account.`,
   });
 }

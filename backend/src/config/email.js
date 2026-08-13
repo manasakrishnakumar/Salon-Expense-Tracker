@@ -3,9 +3,12 @@ import { env } from './env.js';
 
 function createTransporter() {
   if (!env.smtp.user || !env.smtp.pass) return null;
+  // Gmail App Passwords are displayed with spaces (e.g. "abcd efgh ijkl mnop")
+  // but must be used without them — strip any spaces just in case.
+  const pass = env.smtp.pass.replace(/\s+/g, '');
   return nodemailer.createTransport({
     service: 'gmail',
-    auth: { user: env.smtp.user, pass: env.smtp.pass },
+    auth: { user: env.smtp.user, pass },
   });
 }
 
@@ -15,8 +18,13 @@ async function send(to, subject, html) {
     console.warn('[email] SMTP not configured — skipping email to', to);
     return false;
   }
-  await transporter.sendMail({ from: `"Salon Pro" <${env.smtp.from}>`, to, subject, html });
-  return true;
+  try {
+    await transporter.sendMail({ from: `"Salon Pro" <${env.smtp.from}>`, to, subject, html });
+    return true;
+  } catch (err) {
+    console.error('[email] Failed to send email to', to, ':', err.message);
+    return false;
+  }
 }
 
 // ── Worker Invite ────────────────────────────────────────────────────────────
