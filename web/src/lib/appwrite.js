@@ -11,28 +11,44 @@ export const databases = new Databases(client);
 
 export { ID, Query };
 
-// --- JWT for calling our own backend -------------------------------------
-//
-// The app still authenticates directly against Appwrite (createEmailPasswordSession,
-// account.get(), etc. below) — Appwrite remains the identity provider. But
-// everything else (services, stock, expenses, workers, reports) now goes
-// through our Express API instead of the Appwrite database SDK, so the
-// backend can enforce business logic and RBAC instead of trusting this
-// browser code. See ../../../backend and lib/api.js.
-//
-// Appwrite JWTs are short-lived (~15 min), so we mint one lazily and cache
-// it until it's close to expiry rather than minting on every single request.
+// ── Session persistence (cross-domain safe) ────────────────────────────────
+// Instead of relying on cookies (which are blocked cross-domain by modern
+// browsers), we store the Appwrite session secret in localStorage and call
+// client.setSession() so the SDK uses the X-Appwrite-Session header instead.
+const SESSION_KEY = 'salon_session_secret';
+
+export function saveSession(secret) {
+  if (secret) {
+    localStorage.setItem(SESSION_KEY, secret);
+    client.setSession(secret);
+  }
+}
+
+export function restoreSession() {
+  const secret = localStorage.getItem(SESSION_KEY);
+  if (secret) {
+    client.setSession(secret);
+    return true;
+  }
+  return false;
+}
+
+export function clearSession() {
+  localStorage.removeItem(SESSION_KEY);
+  client.setSession('');
+}
+
+// ── JWT for calling our Express backend ────────────────────────────────────
+// Appwrite JWTs are short-lived (~15 min) so we mint lazily and cache.
 let cachedJwt = null;
 let cachedJwtExpiresAt = 0;
 
 export async function getBackendAuthToken() {
   const now = Date.now();
-  if (cachedJwt && now < cachedJwtExpiresAt) {
-    return cachedJwt;
-  }
+  if (cachedJwt && now < cachedJwtExpiresAt) return cachedJwt;
   const { jwt } = await account.createJWT();
   cachedJwt = jwt;
-  cachedJwtExpiresAt = now + 10 * 60 * 1000; // refresh a few minutes early
+  cachedJwtExpiresAt = now + 10 * 60 * 1000;
   return jwt;
 }
 
