@@ -86,6 +86,15 @@ export async function inviteWorker(req, res) {
   // Tag as a worker scoped to this owner
   await users.updatePrefs(newUser.$id, { role: 'worker', ownerId: req.user.ownerId });
 
+  // ALSO add to the workers collection so they appear in the Workers page,
+  // service record picker, and attendance — this is the data layer used
+  // by all parts of the app for listing/filtering workers.
+  const workerDoc = await createMine(env.collections.workers, {
+    userID: req.user.ownerId,
+    name: newUser.name,
+    isActive: true,
+  });
+
   await recordAudit(req.user, 'worker.invite', {
     targetId: newUser.$id,
     message: `Created login account for worker ${email} — credentials shown to admin`,
@@ -93,7 +102,7 @@ export async function inviteWorker(req, res) {
 
   // Return tempPassword to admin so they can share it manually with the worker
   res.status(201).json({
-    worker: { id: newUser.$id, name: newUser.name, email: newUser.email },
+    worker: { id: workerDoc.$id, name: workerDoc.name, email: newUser.email },
     tempPassword,
   });
 }
