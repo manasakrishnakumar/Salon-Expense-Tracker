@@ -1,4 +1,4 @@
-import { getBackendAuthToken } from './appwrite';
+import { getStoredToken } from '../context/AuthContext';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000';
 
@@ -10,7 +10,7 @@ class ApiError extends Error {
 }
 
 async function request(path, { method = 'GET', body } = {}) {
-  const token = await getBackendAuthToken();
+  const token = getStoredToken();
 
   const res = await fetch(`${API_URL}${path}`, {
     method,
@@ -33,17 +33,16 @@ async function request(path, { method = 'GET', body } = {}) {
   return payload;
 }
 
-export const apiGet = (path) => request(path);
-export const apiPost = (path, body) => request(path, { method: 'POST', body });
-export const apiPut = (path, body) => request(path, { method: 'PUT', body });
-export const apiDelete = (path) => request(path, { method: 'DELETE' });
+export const apiGet    = (path)       => request(path);
+export const apiPost   = (path, body) => request(path, { method: 'POST',   body });
+export const apiPut    = (path, body) => request(path, { method: 'PUT',    body });
+export const apiDelete = (path)       => request(path, { method: 'DELETE' });
 
 /**
- * For binary responses (PDF receipts) — fetches with the same auth header
- * as everything else, then triggers a normal browser file download.
+ * For binary responses (PDF receipts) — same auth header, triggers download.
  */
 export async function apiDownload(path, filename) {
-  const token = await getBackendAuthToken();
+  const token = getStoredToken();
   const res = await fetch(`${API_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } });
 
   if (!res.ok) {

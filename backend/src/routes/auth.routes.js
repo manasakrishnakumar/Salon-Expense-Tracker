@@ -1,8 +1,8 @@
 import express from 'express';
-import { proxyLogin, proxyLogout } from '../controllers/authProxy.controller.js';
+import { proxyLogin, proxyMe, proxyChangePassword } from '../controllers/authProxy.controller.js';
 
 export const authRouter = express.Router();
 
-// No requireAuth on these — they're the entry points for authentication
-authRouter.post('/login',  proxyLogin);
-authRouter.post('/logout', proxyLogout);
+authRouter.post('/login',           proxyLogin);
+authRouter.get('/me',               proxyMe);
+authRouter.post('/change-password', proxyChangePassword);

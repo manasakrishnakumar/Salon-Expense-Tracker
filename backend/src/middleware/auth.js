@@ -1,42 +1,45 @@
 import { Account } from 'node-appwrite';
 import { clientAsUser, users } from '../config/appwrite.js';
+import { verifyToken } from '../controllers/authProxy.controller.js';
 
 /**
- * Verifies the caller's identity with Appwrite and attaches their role +
- * tenant (ownerId).
- *
- * Flow: the web/mobile client logs in via the Appwrite client SDK as usual,
- * then calls `account.createJWT()` and sends that JWT as
- * `Authorization: Bearer <jwt>` on every request to THIS API. We hand the
- * JWT back to Appwrite (`account.get()`) to confirm it's genuine and find
- * out who it belongs to — the browser/app never gets to just assert an
- * identity, Appwrite has to vouch for it.
- *
- * role/ownerId live in that Appwrite user's own `prefs`, writable only via
- * the server-side Users API (this backend's secret key) — never by the
- * client. Every collection is scoped by `ownerId` (the salon), not by
- * whoever happens to be logged in, so an owner and their invited workers
- * all read/write the same tenant's data instead of each getting their own
- * empty one.
+ * Accepts EITHER:
+ *  (A) Our own signed JWT from /api/auth/login  [primary — works cross-domain]
+ *  (B) An Appwrite JWT (for backward-compat with any existing sessions)
  */
 export async function requireAuth(req, res, next) {
   try {
     const header = req.headers.authorization || '';
-    const [scheme, jwt] = header.split(' ');
+    const [scheme, token] = header.split(' ');
 
-    if (scheme !== 'Bearer' || !jwt) {
+    if (scheme !== 'Bearer' || !token) {
       return res.status(401).json({ error: 'Missing or malformed Authorization header' });
     }
 
-    const account = new Account(clientAsUser(jwt));
-    const identity = await account.get();
+    // ── Try our own JWT first ─────────────────────────────────────────────
+    try {
+      const payload = verifyToken(token);
+      req.user = {
+        id:      payload.userId,
+        email:   payload.email,
+        name:    payload.name,
+        role:    payload.role,
+        ownerId: payload.ownerId,
+      };
+      return next();
+    } catch {
+      // Not our JWT — fall through to Appwrite JWT
+    }
 
+    // ── Fallback: Appwrite JWT (old sessions / localhost dev) ─────────────
+    const account = new Account(clientAsUser(token));
+    const identity = await account.get();
     const { role, ownerId } = await resolveRoleAndOwner(identity.$id);
 
     req.user = {
-      id: identity.$id,
-      email: identity.email,
-      name: identity.name,
+      id:      identity.$id,
+      email:   identity.email,
+      name:    identity.name,
       role,
       ownerId,
     };
@@ -47,22 +50,11 @@ export async function requireAuth(req, res, next) {
   }
 }
 
-/**
- * A brand-new, self-registered account has no prefs yet — that absence IS
- * the signal that they just signed up as their own salon's owner, so we
- * bootstrap them as owner-of-self and persist it (self-healing: only
- * happens once per account). An invited worker's prefs are written by the
- * owner's invite call (see controllers/workers.controller.js) BEFORE they
- * ever log in, so by the time this code runs for them, prefs already say
- * role: 'worker' with someone else's ownerId — bootstrap never fires.
- */
 async function resolveRoleAndOwner(userId) {
   const prefs = await users.getPrefs(userId).catch(() => ({}));
-
   if (prefs?.role && prefs?.ownerId) {
     return { role: prefs.role, ownerId: prefs.ownerId };
   }
-
   await users.updatePrefs(userId, { role: 'owner', ownerId: userId });
   return { role: 'owner', ownerId: userId };
 }
