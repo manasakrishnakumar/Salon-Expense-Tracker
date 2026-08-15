@@ -20,6 +20,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useServices } from '../context/ServicesContext';
 import { SERVICE_CATEGORIES, CATEGORY_LABELS } from '../data/services';
 import { useTheme } from '../context/ThemeContext';
+import { useAuth } from '../context/AuthContext';
+import { useCustomers } from '../context/CustomersContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -47,7 +49,13 @@ const ServiceCard = memo(({ service, index, onPress, colors }) => {
     }, []);
 
     const categoryColor = colors.serviceCategories[service.category] || colors.primary;
-    const hasCost = service.cost !== null;
+    // Loose `!= null` on purpose: a worker's catalog response has `cost`
+    // stripped entirely server-side (sanitizeServiceForRole), so it's
+    // `undefined`, not `null`, for them. A strict `!== null` check treats
+    // `undefined !== null` as true and then crashes on
+    // `service.cost.toFixed(2)` below — this doubles as "hide cost from
+    // workers" (matching web) and "don't crash reading it".
+    const hasCost = service.cost != null;
 
     return (
         <Animated.View style={[styles.serviceCard, {
@@ -149,9 +157,12 @@ export default function ServicesScreen() {
         deleteServiceRecord,
         getServicesByCategory,
         getTodayServiceCount,
-        getTodayTotalCost,
+        getTodayRevenue,
     } = useServices();
     const { colors } = useTheme();
+    const { user } = useAuth();
+    const { customers } = useCustomers();
+    const isOwner = user?.role === 'owner';
 
     const [activeCategory, setActiveCategory] = useState('ALL');
     const [modalVisible, setModalVisible] = useState(false);
@@ -159,8 +170,17 @@ export default function ServicesScreen() {
     const [selectedService, setSelectedService] = useState(null);
     const [workerName, setWorkerName] = useState('');
     const [quantity, setQuantity] = useState(1);
+    const [tip, setTip] = useState('');
+    const [customerSearch, setCustomerSearch] = useState('');
+    const [selectedCustomer, setSelectedCustomer] = useState(null);
+    const [showCustomerResults, setShowCustomerResults] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
+
+    const filteredCustomers = customers.filter(c =>
+        c.name.toLowerCase().includes(customerSearch.toLowerCase()) ||
+        (c.phone || '').includes(customerSearch)
+    ).slice(0, 5);
 
     // Animations
     const headerOpacity = useRef(new Animated.Value(0)).current;
@@ -231,6 +251,9 @@ export default function ServicesScreen() {
         setSelectedService(service);
         setQuantity(1);
         setWorkerName('');
+        setTip('');
+        setSelectedCustomer(null);
+        setCustomerSearch('');
         setModalVisible(true);
     };
 
@@ -238,7 +261,11 @@ export default function ServicesScreen() {
         if (!selectedService) return;
 
         setIsSubmitting(true);
-        const result = await recordService(selectedService.id, workerName, quantity);
+        const result = await recordService(selectedService.id, workerName, quantity, {
+            tip: parseFloat(tip) || 0,
+            customerId: selectedCustomer?.$id || '',
+            customerName: selectedCustomer?.name || '',
+        });
         setIsSubmitting(false);
 
         if (result.success) {
@@ -311,7 +338,7 @@ export default function ServicesScreen() {
                         <View style={[styles.statDivider, { backgroundColor: colors.border }]} />
                         <View style={styles.statItem}>
                             <Text style={[styles.statValue, { color: colors.successLight }]}>
-                                ₹{getTodayTotalCost().toLocaleString('en-IN')}
+                                ₹{getTodayRevenue().toLocaleString('en-IN')}
                             </Text>
                             <Text style={[styles.statLabel, { color: colors.textSecondary }]}>Today's Revenue</Text>
                         </View>
@@ -432,7 +459,10 @@ export default function ServicesScreen() {
                                         </Text>
                                     </View>
                                     <View>
-                                        {selectedService.cost !== null ? (
+                                        {/* Loose != null — see hasCost above; selectedService.cost is
+                                            undefined (not null) for a worker, and strict !== null here
+                                            would crash on .toFixed() below instead of showing "TBD". */}
+                                        {selectedService.cost != null ? (
                                             <Text style={[styles.selectedServiceCost, { color: colors.primaryLight }]}>
                                                 ₹{selectedService.cost.toFixed(2)}
                                             </Text>
@@ -472,7 +502,72 @@ export default function ServicesScreen() {
                                     </View>
                                 </View>
 
-                                {selectedService.cost !== null && (
+                                {/* Customer (optional — links to loyalty profile) */}
+                                {isOwner && customers.length > 0 && (
+                                    <View style={[styles.inputGroup, { zIndex: 20 }]}>
+                                        <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Customer (optional)</Text>
+                                        {selectedCustomer ? (
+                                            <View style={[styles.customerChip, { backgroundColor: colors.primary + '15', borderColor: colors.primary + '55' }]}>
+                                                <Text style={{ fontSize: 16 }}>👤</Text>
+                                                <Text style={[styles.customerChipName, { color: colors.text }]}>{selectedCustomer.name}</Text>
+                                                <TouchableOpacity onPress={() => { setSelectedCustomer(null); setCustomerSearch(''); }}>
+                                                    <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+                                                </TouchableOpacity>
+                                            </View>
+                                        ) : (
+                                            <>
+                                                <TextInput
+                                                    style={[styles.input, { backgroundColor: colors.glass, borderColor: colors.border, color: colors.text }]}
+                                                    placeholder="Search customer or leave blank for walk-in..."
+                                                    placeholderTextColor={colors.textMuted}
+                                                    value={customerSearch}
+                                                    onChangeText={t => { setCustomerSearch(t); setShowCustomerResults(true); }}
+                                                    onFocus={() => setShowCustomerResults(true)}
+                                                    // Without this, the dropdown (position: absolute, zIndex 20)
+                                                    // stays mounted over the Tip field / Record button below it
+                                                    // whenever the user taps away instead of picking a result,
+                                                    // silently eating their next tap. The short delay lets a tap
+                                                    // on a result row fire its onPress before this dismisses it.
+                                                    onBlur={() => setTimeout(() => setShowCustomerResults(false), 150)}
+                                                />
+                                                {showCustomerResults && customerSearch.length > 0 && filteredCustomers.length > 0 && (
+                                                    <View style={[styles.customerDropdown, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+                                                        {filteredCustomers.map(c => (
+                                                            <TouchableOpacity
+                                                                key={c.$id}
+                                                                style={[styles.customerRow, { borderBottomColor: colors.border }]}
+                                                                onPress={() => { setSelectedCustomer(c); setCustomerSearch(''); setShowCustomerResults(false); }}
+                                                            >
+                                                                <View style={[styles.customerAvatar]}>
+                                                                    <Text style={{ color: '#FFF', fontFamily: 'Poppins_700Bold', fontSize: 12 }}>{c.name[0]}</Text>
+                                                                </View>
+                                                                <View>
+                                                                    <Text style={{ color: colors.text, fontFamily: 'Poppins_600SemiBold', fontSize: 13 }}>{c.name}</Text>
+                                                                    <Text style={{ color: colors.textMuted, fontSize: 11 }}>{c.visitCount || 0} visits · {c.loyaltyPoints || 0} pts</Text>
+                                                                </View>
+                                                            </TouchableOpacity>
+                                                        ))}
+                                                    </View>
+                                                )}
+                                            </>
+                                        )}
+                                    </View>
+                                )}
+
+                                {/* Tip */}
+                                <View style={styles.inputGroup}>
+                                    <Text style={[styles.inputLabel, { color: colors.textSecondary }]}>Tip Amount (₹, optional)</Text>
+                                    <TextInput
+                                        style={[styles.input, { backgroundColor: colors.glass, borderColor: colors.border, color: colors.text }]}
+                                        placeholder="0"
+                                        placeholderTextColor={colors.textMuted}
+                                        keyboardType="decimal-pad"
+                                        value={tip}
+                                        onChangeText={setTip}
+                                    />
+                                </View>
+
+                                {selectedService.cost != null && (
                                     <View style={styles.totalRow}>
                                         <Text style={[styles.totalLabel, { color: colors.textSecondary }]}>Total Cost</Text>
                                         <Text style={[styles.totalValue, { color: colors.successLight }]}>
@@ -947,5 +1042,45 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         alignItems: 'center',
         borderWidth: 1,
-    }
+    },
+    // Customer picker (record-service modal)
+    customerChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        borderRadius: 12,
+        borderWidth: 1,
+    },
+    customerChipName: {
+        flex: 1,
+        fontFamily: 'Poppins_600SemiBold',
+        fontSize: 14,
+    },
+    customerDropdown: {
+        position: 'absolute',
+        top: 62,
+        left: 0,
+        right: 0,
+        borderRadius: 12,
+        borderWidth: 1,
+        overflow: 'hidden',
+        zIndex: 30,
+    },
+    customerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        padding: 12,
+        borderBottomWidth: 1,
+    },
+    customerAvatar: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        backgroundColor: '#A855F7',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
 });

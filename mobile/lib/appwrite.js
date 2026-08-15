@@ -1,21 +1,35 @@
-import { Client, Account, Databases, ID, Query } from 'appwrite';
+import { Client, Account, ID } from 'appwrite';
 
-// Appwrite Configuration
+// Appwrite Configuration — used only for identity (login/session/JWT/
+// password recovery). Everything else (services, stock, expenses, workers,
+// customers, attendance, reports) goes through the backend API instead —
+// see lib/api.js. This mirrors web/src/lib/appwrite.js; see that file's
+// comments for the full "why."
 const client = new Client();
 
 client
     .setEndpoint('https://fra.cloud.appwrite.io/v1')
     .setProject('695f65ac002951c845ea');
 
-// Export services
 export const account = new Account(client);
-export const databases = new Databases(client);
+export { ID };
 
-// Database Configuration
-export const DATABASE_ID = '695f66ba003081a9a85d';
-export const EXPENSES_COLLECTION_ID = 'expenses';
-export const SERVICE_RECORDS_COLLECTION_ID = 'service_record';
+// --- JWT for calling our own backend -------------------------------------
+let cachedJwt = null;
+let cachedJwtExpiresAt = 0;
 
-// Helper exports
-export { ID, Query };
+export async function getBackendAuthToken() {
+    const now = Date.now();
+    if (cachedJwt && now < cachedJwtExpiresAt) {
+        return cachedJwt;
+    }
+    const { jwt } = await account.createJWT();
+    cachedJwt = jwt;
+    cachedJwtExpiresAt = now + 10 * 60 * 1000; // refresh a few minutes early
+    return jwt;
+}
 
+export function clearBackendAuthToken() {
+    cachedJwt = null;
+    cachedJwtExpiresAt = 0;
+}

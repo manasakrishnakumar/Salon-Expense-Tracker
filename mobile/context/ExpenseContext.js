@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { databases, DATABASE_ID, EXPENSES_COLLECTION_ID, ID, Query } from '../lib/appwrite';
+import { apiGet, apiPost, apiDelete } from '../lib/api';
 import { useAuth } from './AuthContext';
 
 const ExpenseContext = createContext();
@@ -20,26 +20,23 @@ export const ExpenseProvider = ({ children }) => {
         }
     }, [isLoggedIn, user]);
 
-    // Load expenses from Appwrite
+    // Load expenses from the backend (owner-only — a worker gets a 403,
+    // which is expected: expenses are owner-only, same as on web).
     const loadExpenses = async () => {
         if (!user) return;
 
         setLoading(true);
         try {
-            const response = await databases.listDocuments(
-                DATABASE_ID,
-                EXPENSES_COLLECTION_ID,
-                [
-                    Query.equal('userID', user.$id),
-                    Query.orderDesc('$createdAt')
-                ]
-            );
-            setExpenses(response.documents);
-            // Cache locally for offline access
-            await AsyncStorage.setItem('salonExpenses', JSON.stringify(response.documents));
+            const { expenses } = await apiGet('/api/expenses');
+            setExpenses(expenses);
+            await AsyncStorage.setItem('salonExpenses', JSON.stringify(expenses));
         } catch (error) {
             console.error('Error loading expenses:', error);
-            // Fallback to cached data
+            if (error.status === 403) {
+                // A worker landing here shouldn't see a stale owner's cache.
+                setExpenses([]);
+                return;
+            }
             try {
                 const cached = await AsyncStorage.getItem('salonExpenses');
                 if (cached) {
@@ -53,25 +50,17 @@ export const ExpenseProvider = ({ children }) => {
         }
     };
 
-    // Add expense to Appwrite
+    // Add expense via the backend — server-side owner-only check applies
     const addExpense = async (expense) => {
         if (!user) return { success: false, error: 'Not logged in' };
 
         try {
-            const newExpense = await databases.createDocument(
-                DATABASE_ID,
-                EXPENSES_COLLECTION_ID,
-                ID.unique(),
-                {
-                    userID: user.$id,
-                    userName: user.name || 'Unknown',
-                    userEmail: user.email,
-                    name: expense.name,
-                    amount: parseFloat(expense.amount),
-                    category: expense.category,
-                    date: expense.date,
-                }
-            );
+            const { expense: newExpense } = await apiPost('/api/expenses', {
+                name: expense.name,
+                amount: parseFloat(expense.amount),
+                category: expense.category,
+                date: expense.date,
+            });
             setExpenses(prev => [newExpense, ...prev]);
             return { success: true };
         } catch (error) {
@@ -80,10 +69,10 @@ export const ExpenseProvider = ({ children }) => {
         }
     };
 
-    // Delete expense from Appwrite
+    // Delete expense via the backend
     const deleteExpense = async (id) => {
         try {
-            await databases.deleteDocument(DATABASE_ID, EXPENSES_COLLECTION_ID, id);
+            await apiDelete(`/api/expenses/${id}`);
             setExpenses(prev => prev.filter(exp => exp.$id !== id));
             return { success: true };
         } catch (error) {

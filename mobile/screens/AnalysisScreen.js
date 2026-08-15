@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
     View,
     Text,
@@ -8,7 +8,10 @@ import {
     Animated,
     TouchableOpacity,
     Platform,
-    FlatList
+    FlatList,
+    Share,
+    Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +19,19 @@ import { BarChart, PieChart, LineChart } from 'react-native-chart-kit';
 import { useExpenses } from '../context/ExpenseContext';
 import { useServices } from '../context/ServicesContext';
 import { useTheme } from '../context/ThemeContext';
+import { apiGet, apiGetText } from '../lib/api';
+
+function fmtINR(v) { return '₹' + Number(v || 0).toLocaleString('en-IN'); }
+
+// This-month bounds, matching the default range web's DateRangeSelector
+// lands on — good enough for a mobile P&L glance without building a full
+// custom date-range picker.
+function thisMonthBounds() {
+    const now = new Date();
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    const iso = d => d.toISOString().split('T')[0];
+    return { from: iso(first), to: iso(now) };
+}
 
 const { width } = Dimensions.get('window');
 
@@ -28,12 +44,53 @@ const CHART_COLORS = [
 
 export default function AnalysisScreen() {
     const { expenses, getMonthlyTotal: getMonthlyExpense } = useExpenses();
-    const { getMonthlyServiceCost: getMonthlyRevenue, serviceRecords } = useServices();
+    // "Revenue" here must be totalPrice (what was charged), not totalCost
+    // (what the product usage cost the salon) — this screen used to alias
+    // getMonthlyServiceCost (cost) as "getMonthlyRevenue", so every number
+    // labeled Revenue on this page was silently showing cost instead. Same
+    // class of bug fixed on HomeScreen/ServicesScreen — see getMonthlyRevenue
+    // in ServicesContext.js for the real revenue calculation.
+    const { getMonthlyRevenue, serviceRecords } = useServices();
     const { colors } = useTheme();
 
-    const [activeTab, setActiveTab] = useState('overview'); // overview, revenue, expenses
+    const [activeTab, setActiveTab] = useState('overview'); // overview, revenue, expenses, pnl
+    const [pnl, setPnl] = useState(null);
+    const [pnlLoading, setPnlLoading] = useState(false);
+    const [pnlError, setPnlError] = useState('');
+    const [exporting, setExporting] = useState(false);
 
     const scrollY = useRef(new Animated.Value(0)).current;
+
+    // Load P&L only once the tab is opened, for this month.
+    useEffect(() => {
+        if (activeTab !== 'pnl') return;
+        const { from, to } = thisMonthBounds();
+        setPnlLoading(true);
+        setPnlError('');
+        apiGet(`/api/reports/profit-loss?from=${from}&to=${to}`)
+            .then(setPnl)
+            .catch(err => setPnlError(err.message || 'Failed to load P&L'))
+            .finally(() => setPnlLoading(false));
+    }, [activeTab]);
+
+    const handleExportCsv = async () => {
+        const { from, to } = thisMonthBounds();
+        setExporting(true);
+        try {
+            const csv = await apiGetText(`/api/reports/export?from=${from}&to=${to}`);
+            // Mobile has no browser-style "click to download" — hand the CSV
+            // text to the native Share sheet so the user can save/send it
+            // (Files app, email, WhatsApp, etc.) however they prefer.
+            await Share.share({
+                title: `salon-report-${from}-to-${to}.csv`,
+                message: csv,
+            });
+        } catch (err) {
+            Alert.alert('Export Failed', err.message || 'Could not export CSV.');
+        } finally {
+            setExporting(false);
+        }
+    };
 
     // --- Data Processing ---
 
@@ -48,7 +105,7 @@ export default function AnalysisScreen() {
         const data = {};
         serviceRecords.forEach(rec => {
             const cat = rec.category || 'Other';
-            data[cat] = (data[cat] || 0) + (rec.totalCost || 0);
+            data[cat] = (data[cat] || 0) + (rec.totalPrice || 0);
         });
 
         return Object.entries(data)
@@ -91,7 +148,7 @@ export default function AnalysisScreen() {
         const revData = last7Days.map(date =>
             serviceRecords
                 .filter(r => r.Date && r.Date.startsWith(date))
-                .reduce((sum, r) => sum + (r.totalCost || 0), 0)
+                .reduce((sum, r) => sum + (r.totalPrice || 0), 0)
         );
 
         const expData = last7Days.map(date =>
@@ -272,6 +329,58 @@ export default function AnalysisScreen() {
         </View>
     );
 
+    const renderPnL = () => (
+        <View style={styles.section}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <Text style={[styles.sectionTitle, { color: colors.text, marginBottom: 0, marginLeft: 0 }]}>Profit & Loss (This Month)</Text>
+                <TouchableOpacity
+                    style={[styles.exportBtn, { backgroundColor: colors.primary }, exporting && { opacity: 0.6 }]}
+                    onPress={handleExportCsv}
+                    disabled={exporting}
+                >
+                    <Ionicons name="share-outline" size={14} color="#FFF" />
+                    <Text style={styles.exportBtnText}>{exporting ? 'Exporting...' : 'Export CSV'}</Text>
+                </TouchableOpacity>
+            </View>
+
+            {pnlLoading ? (
+                <ActivityIndicator color={colors.primary} style={{ marginVertical: 30 }} />
+            ) : pnlError ? (
+                <Text style={{ color: colors.dangerLight, textAlign: 'center', marginVertical: 20 }}>{pnlError}</Text>
+            ) : pnl ? (
+                <>
+                    <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+                        <View style={styles.plRow}><Text style={[styles.plLabel, { color: colors.textSecondary }]}>Revenue</Text><Text style={[styles.plValue, { color: colors.successLight }]}>{fmtINR(pnl.revenue)}</Text></View>
+                        <View style={styles.plRow}><Text style={[styles.plLabel, { color: colors.textSecondary }]}>Stock Cost</Text><Text style={[styles.plValue, { color: colors.dangerLight }]}>-{fmtINR(pnl.stockCost)}</Text></View>
+                        <View style={styles.plRow}><Text style={[styles.plLabel, { color: colors.textSecondary }]}>Gross Profit</Text><Text style={[styles.plValue, { color: colors.text }]}>{fmtINR(pnl.grossProfit)}</Text></View>
+                        <View style={styles.plRow}><Text style={[styles.plLabel, { color: colors.textSecondary }]}>Other Expenses</Text><Text style={[styles.plValue, { color: colors.dangerLight }]}>-{fmtINR(pnl.otherExpenses)}</Text></View>
+                        <View style={styles.plRow}><Text style={[styles.plLabel, { color: colors.textSecondary }]}>Tips</Text><Text style={[styles.plValue, { color: '#EC4899' }]}>+{fmtINR(pnl.tips)}</Text></View>
+                        <View style={[styles.plRow, { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10, marginTop: 4 }]}>
+                            <Text style={[styles.plLabel, { color: colors.text, fontFamily: 'Poppins_700Bold' }]}>Net Profit</Text>
+                            <Text style={[styles.plValue, { color: pnl.netProfit >= 0 ? colors.successLight : colors.dangerLight, fontSize: 18 }]}>
+                                {pnl.netProfit >= 0 ? '+' : ''}{fmtINR(pnl.netProfit)}
+                            </Text>
+                        </View>
+                    </View>
+
+                    {pnl.workerPerformance?.length > 0 && (
+                        <View style={{ marginTop: 20 }}>
+                            <Text style={[styles.sectionTitle, { color: colors.text }]}>Worker Performance</Text>
+                            <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.border }]}>
+                                {pnl.workerPerformance.map((w, i) => (
+                                    <View key={i} style={[styles.breakdownRow, { borderBottomColor: colors.border }]}>
+                                        <Text style={{ color: colors.text, fontSize: 13, fontFamily: 'Poppins_500Medium' }}>{w.name}</Text>
+                                        <Text style={{ color: colors.successLight, fontWeight: '700' }}>{fmtINR(w.revenue)} · {w.services} svc</Text>
+                                    </View>
+                                ))}
+                            </View>
+                        </View>
+                    )}
+                </>
+            ) : null}
+        </View>
+    );
+
     return (
         <View style={[styles.container, { backgroundColor: colors.background }]}>
             <LinearGradient
@@ -290,14 +399,14 @@ export default function AnalysisScreen() {
             >
                 {/* Tabs */}
                 <View style={[styles.tabContainer, { backgroundColor: colors.glass, borderColor: colors.border }]}>
-                    {['overview', 'revenue', 'expenses'].map((tab) => (
+                    {['overview', 'revenue', 'expenses', 'pnl'].map((tab) => (
                         <TouchableOpacity
                             key={tab}
                             style={[styles.tab, activeTab === tab && { backgroundColor: colors.primary }]}
                             onPress={() => setActiveTab(tab)}
                         >
                             <Text style={[styles.tabText, { color: colors.textSecondary }, activeTab === tab && styles.activeTabText]}>
-                                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                {tab === 'pnl' ? 'P&L' : tab.charAt(0).toUpperCase() + tab.slice(1)}
                             </Text>
                         </TouchableOpacity>
                     ))}
@@ -325,6 +434,8 @@ export default function AnalysisScreen() {
                         {renderTrendAnalysis()}
                     </>
                 )}
+
+                {activeTab === 'pnl' && renderPnL()}
 
             </ScrollView>
         </View>
@@ -446,5 +557,32 @@ const styles = StyleSheet.create({
     legendText: {
         fontSize: 12,
         fontFamily: 'Poppins_500Medium',
+    },
+    exportBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        borderRadius: 10,
+    },
+    exportBtnText: {
+        color: '#FFF',
+        fontSize: 12,
+        fontFamily: 'Poppins_600SemiBold',
+    },
+    plRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 8,
+    },
+    plLabel: {
+        fontSize: 13,
+        fontFamily: 'Poppins_500Medium',
+    },
+    plValue: {
+        fontSize: 15,
+        fontFamily: 'Poppins_700Bold',
     },
 });
