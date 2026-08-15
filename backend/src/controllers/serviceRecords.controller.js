@@ -36,7 +36,11 @@ export async function createServiceRecord(req, res) {
   if (!service) throw new HttpError(404, 'Service not found in catalog');
 
   const { unitCost, totalCost } = calculateServiceCost(service, quantity);
-  const price = await getPriceForService(req.user.ownerId, serviceId);
+  // Owner's explicit price always wins; otherwise fall back to the
+  // catalog's researched defaultPrice so a fresh salon doesn't charge ₹0
+  // for every service until someone manually prices all of them.
+  const ownerPrice = await getPriceForService(req.user.ownerId, serviceId);
+  const price = ownerPrice ?? service.defaultPrice ?? null;
   const { unitPrice, totalPrice } = calculateServicePrice(price, quantity);
   const effectiveWorkerName = req.user.role === 'worker' ? (req.user.name || workerName) : workerName;
 

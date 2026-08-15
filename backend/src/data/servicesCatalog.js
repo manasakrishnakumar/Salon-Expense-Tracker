@@ -5,6 +5,19 @@
 //
 // 60 services WITH complete cost details
 // 23 services WITHOUT details (cost is null)
+//
+// `defaultPrice` — what to charge a customer, before any owner override.
+// Researched against Spin Salon India's published Essential-tier rates
+// (spinsalon.in — men's haircut ₹249, women's cut+blowdry ₹349, beard ₹99,
+// hair spa ₹599) for the services that map directly onto their menu;
+// everything else is priced at typical lower-premium/budget Indian unisex
+// salon rates for the category, scaled relative to this catalog's own
+// `cost` figures (a pricier product kit gets a pricier service). This is
+// only ever a *default* — see logic/pricing.js's mergeCatalogWithPrices:
+// an owner's own price (service_prices collection, set via the Pricing tab
+// on Services) always wins once they've set one. Before this, an unset
+// price fell back to 0, which is why Revenue/P&L showed ₹0 for every
+// service until an owner manually priced all ~80 of these one by one.
 
 export const SERVICE_CATEGORIES = {
     FACIALS: 'facials',
@@ -30,6 +43,7 @@ const servicesWithDetails = [
         name: 'DIAMOND FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 139.7,
+        defaultPrice: 699,
         products: [
             { name: 'CLEANSER', quantity: '10g', cost: 15 },
             { name: 'SCRUB', quantity: '10g', cost: 8.5 },
@@ -44,6 +58,7 @@ const servicesWithDetails = [
         name: 'PEARL FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 91.7,
+        defaultPrice: 499,
         products: [
             { name: 'CLEANSER', quantity: '10g', cost: 10 },
             { name: 'SCRUB', quantity: '10g', cost: 8.5 },
@@ -58,6 +73,7 @@ const servicesWithDetails = [
         name: "NATUR'S PAPPAYA",
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 105,
+        defaultPrice: 599,
         products: [
             { name: 'CLEANSER', quantity: '10g', cost: 10 },
             { name: 'SCRUB', quantity: '5g', cost: 15 },
@@ -71,6 +87,7 @@ const servicesWithDetails = [
         name: 'WHITENING CLEANUP',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 147.4,
+        defaultPrice: 699,
         products: [
             { name: 'CLEANSER', quantity: '15ml', cost: 3.1 },
             { name: 'SCRUB', quantity: '10g', cost: 5.1 },
@@ -85,6 +102,7 @@ const servicesWithDetails = [
         name: 'BASIC CLEANUP',
         category: SERVICE_CATEGORIES.CLEANUPS,
         cost: 17,
+        defaultPrice: 249,
         products: [
             { name: 'CLEANSER', quantity: '15ml', cost: 3.1 },
             { name: 'SCRUB', quantity: '10g', cost: 5.1 },
@@ -97,6 +115,7 @@ const servicesWithDetails = [
         name: 'HYDRAVITA CLEANUP',
         category: SERVICE_CATEGORIES.CLEANUPS,
         cost: 169.5,
+        defaultPrice: 799,
         products: [
             { name: 'CLEANSER', quantity: '10g', cost: 20.5 },
             { name: 'SCRUB', quantity: '10g', cost: 22.5 },
@@ -110,6 +129,7 @@ const servicesWithDetails = [
         name: 'PURAVITA CLEANUP',
         category: SERVICE_CATEGORIES.CLEANUPS,
         cost: 158,
+        defaultPrice: 749,
         products: [
             { name: 'CLEANSER', quantity: '10g', cost: 19.5 },
             { name: 'SCRUB', quantity: '10g', cost: 18 },
@@ -123,6 +143,7 @@ const servicesWithDetails = [
         name: 'GOLDSHEEN FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 434,
+        defaultPrice: 1599,
         products: [
             { name: 'FACIAL KIT', quantity: '1 kit', cost: 356 },
             { name: 'CLEANSER', quantity: '10g', cost: 19.5 },
@@ -136,6 +157,7 @@ const servicesWithDetails = [
         name: 'INSTAFAIR FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 380,
+        defaultPrice: 1399,
         products: [
             { name: 'FACIAL KIT', quantity: '1 kit', cost: 302 },
             { name: 'CLEANSER', quantity: '10g', cost: 19.5 },
@@ -149,6 +171,7 @@ const servicesWithDetails = [
         name: 'DIPIGMENTONE',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 285.5,
+        defaultPrice: 1199,
         products: [
             { name: 'FACIAL KIT', quantity: '1 kit', cost: 248 },
             { name: 'CLEANSER', quantity: '10g', cost: 19.5 },
@@ -160,6 +183,7 @@ const servicesWithDetails = [
         name: 'GLOWDERMI',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 284.5,
+        defaultPrice: 1199,
         products: [
             { name: 'FACIAL KIT', quantity: '1 kit', cost: 216 },
             { name: 'CLEANSER', quantity: '10g', cost: 19.5 },
@@ -172,6 +196,7 @@ const servicesWithDetails = [
         name: 'ACNEX',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 295,
+        defaultPrice: 1299,
         products: [
             { name: 'FACIAL KIT', quantity: '1 kit', cost: 248 },
             { name: 'CLEANSER', quantity: '10g', cost: 19.5 },
@@ -184,6 +209,7 @@ const servicesWithDetails = [
         name: 'PAPPAYA FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 480,
+        defaultPrice: 1699,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 480 }],
     },
     {
@@ -191,6 +217,7 @@ const servicesWithDetails = [
         name: 'BEAR BERRY FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 493,
+        defaultPrice: 1799,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 493 }],
     },
     {
@@ -198,6 +225,7 @@ const servicesWithDetails = [
         name: 'VINO GRAPES FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 480,
+        defaultPrice: 1699,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 480 }],
     },
     {
@@ -205,6 +233,7 @@ const servicesWithDetails = [
         name: 'PINE APPLE FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 480,
+        defaultPrice: 1699,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 480 }],
     },
     {
@@ -212,6 +241,7 @@ const servicesWithDetails = [
         name: 'KIWI FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 493,
+        defaultPrice: 1799,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 493 }],
     },
     {
@@ -219,6 +249,7 @@ const servicesWithDetails = [
         name: 'ULTIMA PEARL FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 753,
+        defaultPrice: 2499,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 753 }],
     },
     {
@@ -226,6 +257,7 @@ const servicesWithDetails = [
         name: 'RETAMIN YOUTH BRIGHTENING FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 451,
+        defaultPrice: 1599,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 451 }],
     },
     {
@@ -233,6 +265,7 @@ const servicesWithDetails = [
         name: 'RETAMIN SKIN BRIGHTENING FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 406,
+        defaultPrice: 1499,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 406 }],
     },
     {
@@ -240,6 +273,7 @@ const servicesWithDetails = [
         name: 'BRIDELGLOW SKIN WHITENING FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 243,
+        defaultPrice: 999,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 243 }],
     },
     {
@@ -247,6 +281,7 @@ const servicesWithDetails = [
         name: 'BRIDELGLOW SKIN BRIGHTENING FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 256,
+        defaultPrice: 1099,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 256 }],
     },
     {
@@ -254,6 +289,7 @@ const servicesWithDetails = [
         name: 'PROMEN FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 276,
+        defaultPrice: 1199,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 276 }],
     },
     {
@@ -261,6 +297,7 @@ const servicesWithDetails = [
         name: 'RAAGA GOLD FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 356,
+        defaultPrice: 1399,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 356 }],
     },
     {
@@ -268,6 +305,7 @@ const servicesWithDetails = [
         name: 'RAAGA PLATINUM FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 408,
+        defaultPrice: 1599,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 408 }],
     },
     {
@@ -275,6 +313,7 @@ const servicesWithDetails = [
         name: 'RAAGA BRIDEL FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 562,
+        defaultPrice: 1999,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 562 }],
     },
     {
@@ -282,6 +321,7 @@ const servicesWithDetails = [
         name: 'SEASOUL HYDRA FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 147,
+        defaultPrice: 699,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 147 }],
     },
     {
@@ -289,6 +329,7 @@ const servicesWithDetails = [
         name: 'KOREAN GLASS FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 254,
+        defaultPrice: 1099,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 254 }],
     },
     {
@@ -296,6 +337,7 @@ const servicesWithDetails = [
         name: 'DEAD SEA DEEP HYDRATE FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 228,
+        defaultPrice: 999,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 228 }],
     },
     {
@@ -303,6 +345,7 @@ const servicesWithDetails = [
         name: 'DEAD SEA ARGAN CLARIFYING OILY FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 228,
+        defaultPrice: 999,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 228 }],
     },
     {
@@ -310,6 +353,7 @@ const servicesWithDetails = [
         name: 'DEAD SEA ARG CLARIFYING ACNE FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 228,
+        defaultPrice: 999,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 228 }],
     },
     {
@@ -317,6 +361,7 @@ const servicesWithDetails = [
         name: 'DEAD SEA ANTI AGING FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 228,
+        defaultPrice: 999,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 228 }],
     },
     {
@@ -324,6 +369,7 @@ const servicesWithDetails = [
         name: 'GOLD MOROCCAN ANTI AGING FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 233,
+        defaultPrice: 999,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 233 }],
     },
     {
@@ -331,6 +377,7 @@ const servicesWithDetails = [
         name: 'GOLD MOROCCAN ARGAN DRY SKIN FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 233,
+        defaultPrice: 999,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 233 }],
     },
     {
@@ -338,6 +385,7 @@ const servicesWithDetails = [
         name: 'GOLD MOROCCAN ARGAN OILY SKIN FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 233,
+        defaultPrice: 999,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 233 }],
     },
     {
@@ -345,6 +393,7 @@ const servicesWithDetails = [
         name: 'CRYO-RED CARPET DEPIGMENTATION FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 382,
+        defaultPrice: 1399,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 382 }],
     },
     {
@@ -352,6 +401,7 @@ const servicesWithDetails = [
         name: 'CRYO-RED CARPET DNA ANTI AGING FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 382,
+        defaultPrice: 1399,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 382 }],
     },
     {
@@ -359,6 +409,7 @@ const servicesWithDetails = [
         name: 'CRYO-RED CARPET DNA PORE MINIMISING FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 382,
+        defaultPrice: 1399,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 382 }],
     },
     {
@@ -366,6 +417,7 @@ const servicesWithDetails = [
         name: 'DERMA ICE-BRIGHTENING ANTI ACNE FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 295,
+        defaultPrice: 1299,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 295 }],
     },
     {
@@ -373,6 +425,7 @@ const servicesWithDetails = [
         name: 'DERMA ICE-FACIAL INSTANTGLOW FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 295,
+        defaultPrice: 1299,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 295 }],
     },
     {
@@ -380,6 +433,7 @@ const servicesWithDetails = [
         name: 'DERMA ICE-FACIAL TIGHTENING FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 295,
+        defaultPrice: 1299,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 295 }],
     },
     {
@@ -387,6 +441,7 @@ const servicesWithDetails = [
         name: 'SEASOUL PURE MOIST FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 122,
+        defaultPrice: 599,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 122 }],
     },
     {
@@ -394,6 +449,7 @@ const servicesWithDetails = [
         name: 'SEASOUL PURE PORE FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 122,
+        defaultPrice: 599,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 122 }],
     },
     {
@@ -401,6 +457,7 @@ const servicesWithDetails = [
         name: 'DEAD SEA CHOCOMINT FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 167,
+        defaultPrice: 799,
         products: [{ name: 'FACIAL KIT', quantity: '1 kit', cost: 167 }],
     },
     // CLEANUPS
@@ -409,6 +466,7 @@ const servicesWithDetails = [
         name: 'SEASOUL BASIC ORGANIC CLEANUP DRY SKIN',
         category: SERVICE_CATEGORIES.CLEANUPS,
         cost: 92,
+        defaultPrice: 499,
         products: [{ name: 'CLEANUP KIT', quantity: '1 kit', cost: 92 }],
     },
     {
@@ -416,6 +474,7 @@ const servicesWithDetails = [
         name: 'SEASOUL BASIC ORGANIC CLEANUP OILY SKIN',
         category: SERVICE_CATEGORIES.CLEANUPS,
         cost: 92,
+        defaultPrice: 499,
         products: [{ name: 'CLEANUP KIT', quantity: '1 kit', cost: 92 }],
     },
     {
@@ -423,6 +482,7 @@ const servicesWithDetails = [
         name: 'SEASOUL BASIC ORGANIC ACNE CLEANUP',
         category: SERVICE_CATEGORIES.CLEANUPS,
         cost: 92,
+        defaultPrice: 499,
         products: [{ name: 'CLEANUP KIT', quantity: '1 kit', cost: 92 }],
     },
     {
@@ -430,6 +490,7 @@ const servicesWithDetails = [
         name: 'SEASOUL BASIC ORGANIC BRAZILIAN',
         category: SERVICE_CATEGORIES.CLEANUPS,
         cost: 92,
+        defaultPrice: 499,
         products: [{ name: 'CLEANUP KIT', quantity: '1 kit', cost: 92 }],
     },
     // PEDICURE/MANICURE
@@ -438,6 +499,7 @@ const servicesWithDetails = [
         name: 'LOTUS PEDICURE',
         category: SERVICE_CATEGORIES.PEDICURE_MANICURE,
         cost: 246,
+        defaultPrice: 799,
         products: [{ name: 'PEDICURE KIT', quantity: '1 kit', cost: 246 }],
     },
     {
@@ -445,6 +507,7 @@ const servicesWithDetails = [
         name: 'RAAGA PEDICURE',
         category: SERVICE_CATEGORIES.PEDICURE_MANICURE,
         cost: 165,
+        defaultPrice: 599,
         products: [{ name: 'PEDICURE KIT', quantity: '1 kit', cost: 165 }],
     },
     {
@@ -452,6 +515,7 @@ const servicesWithDetails = [
         name: 'DEAD SEA ANTI TAN PEDICURE',
         category: SERVICE_CATEGORIES.PEDICURE_MANICURE,
         cost: 133,
+        defaultPrice: 549,
         products: [{ name: 'PEDICURE KIT', quantity: '1 kit', cost: 133 }],
     },
     {
@@ -459,6 +523,7 @@ const servicesWithDetails = [
         name: 'CANDELSPA PEDI MANI',
         category: SERVICE_CATEGORIES.PEDICURE_MANICURE,
         cost: 203,
+        defaultPrice: 699,
         products: [{ name: 'PEDICURE KIT', quantity: '1 kit', cost: 203 }],
     },
     {
@@ -466,6 +531,7 @@ const servicesWithDetails = [
         name: 'BOMBSHELL PEDI MANI',
         category: SERVICE_CATEGORIES.PEDICURE_MANICURE,
         cost: 203,
+        defaultPrice: 699,
         products: [{ name: 'PEDICURE KIT', quantity: '1 kit', cost: 203 }],
     },
     {
@@ -473,6 +539,7 @@ const servicesWithDetails = [
         name: 'BASIC MANI PEDI',
         category: SERVICE_CATEGORIES.PEDICURE_MANICURE,
         cost: 38,
+        defaultPrice: 349,
         products: [{ name: 'PEDICURE KIT', quantity: '1 kit', cost: 38 }],
     },
     {
@@ -480,6 +547,7 @@ const servicesWithDetails = [
         name: 'CHOCOLATE MINT PEDICURE',
         category: SERVICE_CATEGORIES.PEDICURE_MANICURE,
         cost: 102,
+        defaultPrice: 499,
         products: [{ name: 'PEDICURE KIT', quantity: '1 kit', cost: 102 }],
     },
     // OTHER SERVICES with details
@@ -488,6 +556,7 @@ const servicesWithDetails = [
         name: 'RAAGA D TAN',
         category: SERVICE_CATEGORIES.OTHER,
         cost: 38,
+        defaultPrice: 249,
         products: [{ name: 'D TAN', quantity: '20g', cost: 38 }],
     },
     {
@@ -495,6 +564,7 @@ const servicesWithDetails = [
         name: 'RAAGA WAX',
         category: SERVICE_CATEGORIES.OTHER,
         cost: 181,
+        defaultPrice: 699,
         products: [{ name: 'WAX TIN', quantity: '150g', cost: 181 }],
         note: 'Full leg, full arms, under arms',
     },
@@ -503,6 +573,7 @@ const servicesWithDetails = [
         name: 'HAIR SPA',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 265,
+        defaultPrice: 599,
         products: [{ name: 'HAIR SPA BOX', quantity: '166g', cost: 265 }],
         note: 'For shoulder level',
     },
@@ -511,6 +582,7 @@ const servicesWithDetails = [
         name: 'MAJIREL MEN COLOUR',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 270,
+        defaultPrice: 899,
         products: [{ name: 'COLOUR', quantity: '90g', cost: 270 }],
     },
     {
@@ -518,6 +590,7 @@ const servicesWithDetails = [
         name: 'INOVA MEN COLOUR',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 340,
+        defaultPrice: 999,
         products: [{ name: 'COLOUR', quantity: '70g', cost: 340 }],
     },
 ];
@@ -529,6 +602,8 @@ const servicesWithoutDetails = [
         name: 'HAIR CUT',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 6.5,
+        // Spin Salon India, Essential tier — men's haircut (spinsalon.in/haircut-price-bangalore)
+        defaultPrice: 249,
         products: [
             { name: 'HAIR GEL', quantity: '5g', cost: 4.5 },
             { name: 'TALCUM POWDER', quantity: '5g', cost: 2 },
@@ -539,6 +614,8 @@ const servicesWithoutDetails = [
         name: 'BEARD',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 13,
+        // Spin Salon India, Essential tier — beard styling
+        defaultPrice: 99,
         products: [
             { name: 'SHAVING FOAM', quantity: '8g', cost: 6 },
             { name: 'AFTER SHAVE LOTION', quantity: '5ml', cost: 5 },
@@ -550,6 +627,8 @@ const servicesWithoutDetails = [
         name: 'HAIR CUT BEARD',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 19.5,
+        // Bundled discount vs haircut(249) + beard(99) done separately
+        defaultPrice: 299,
         products: [
             { name: 'HAIR GEL', quantity: '5g', cost: 4.5 },
             { name: 'TALCUM POWDER', quantity: '5g', cost: 2 },
@@ -563,6 +642,8 @@ const servicesWithoutDetails = [
         name: 'FEMALE H/C',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 20,
+        // Spin Salon India, Essential tier — women's haircut & blow dry
+        defaultPrice: 349,
         products: [
             { name: 'SHAMPOO', quantity: '10ml', cost: 12 },
             { name: 'CONDITIONER', quantity: '5ml', cost: 8 },
@@ -573,6 +654,8 @@ const servicesWithoutDetails = [
         name: 'BLOWDRY',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 9,
+        // Spin Salon India, Essential tier — hair styling/blow dry
+        defaultPrice: 249,
         products: [
             { name: 'HEAT PROTECTOR SPRAY', quantity: '5ml', cost: 9 },
         ],
@@ -582,6 +665,7 @@ const servicesWithoutDetails = [
         name: 'BEARD COLOUR',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 38,
+        defaultPrice: 199,
         products: [
             { name: 'BEARD DYE', quantity: '10g', cost: 22 },
             { name: 'DEVELOPER', quantity: '10ml', cost: 10 },
@@ -594,6 +678,7 @@ const servicesWithoutDetails = [
         name: 'HAIR WASH',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 24,
+        defaultPrice: 99,
         products: [
             { name: 'SHAMPOO', quantity: '15ml', cost: 18 },
             { name: 'CONDITIONER', quantity: '8ml', cost: 6 },
@@ -604,6 +689,7 @@ const servicesWithoutDetails = [
         name: 'CHILD H/C',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 4,
+        defaultPrice: 149,
         products: [
             { name: 'HAIR GEL', quantity: '3g', cost: 2.5 },
             { name: 'TALCUM POWDER', quantity: '3g', cost: 1.5 },
@@ -614,6 +700,7 @@ const servicesWithoutDetails = [
         name: 'H/MSG',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 18,
+        defaultPrice: 149,
         products: [
             { name: 'HAIR OIL', quantity: '10ml', cost: 12 },
             { name: 'SHAMPOO', quantity: '8ml', cost: 6 },
@@ -624,6 +711,7 @@ const servicesWithoutDetails = [
         name: 'EYEBROW',
         category: SERVICE_CATEGORIES.OTHER,
         cost: 3,
+        defaultPrice: 49,
         products: [
             { name: 'THREADING THREAD', quantity: '1 use', cost: 1.5 },
             { name: 'ALUM BLOCK', quantity: '1 use', cost: 1.5 },
@@ -634,6 +722,7 @@ const servicesWithoutDetails = [
         name: 'FACIAL',
         category: SERVICE_CATEGORIES.FACIALS,
         cost: 27,
+        defaultPrice: 399,
         products: [
             { name: 'CLEANSER', quantity: '10g', cost: 10 },
             { name: 'SCRUB', quantity: '5g', cost: 4.5 },
@@ -648,6 +737,7 @@ const servicesWithoutDetails = [
         name: 'P/C',
         category: SERVICE_CATEGORIES.PEDICURE_MANICURE,
         cost: 42,
+        defaultPrice: 349,
         products: [
             { name: 'FOOT SCRUB', quantity: '15g', cost: 18 },
             { name: 'FOOT CREAM', quantity: '10g', cost: 14 },
@@ -660,6 +750,7 @@ const servicesWithoutDetails = [
         name: 'M/C',
         category: SERVICE_CATEGORIES.PEDICURE_MANICURE,
         cost: 24,
+        defaultPrice: 249,
         products: [
             { name: 'NAIL POLISH REMOVER', quantity: '5ml', cost: 4 },
             { name: 'CUTICLE OIL', quantity: '3ml', cost: 6 },
@@ -673,6 +764,8 @@ const servicesWithoutDetails = [
         name: 'FEMALE H/SPA',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 92,
+        // Spin Salon India, Essential tier — women's hair spa add-on
+        defaultPrice: 599,
         products: [
             { name: 'SHAMPOO', quantity: '15ml', cost: 18 },
             { name: 'SPA HAIR MASK', quantity: '20g', cost: 52 },
@@ -686,6 +779,7 @@ const servicesWithoutDetails = [
         name: 'CLEAN UP',
         category: SERVICE_CATEGORIES.CLEANUPS,
         cost: 28,
+        defaultPrice: 299,
         products: [
             { name: 'CLEANSER', quantity: '15g', cost: 10 },
             { name: 'SCRUB', quantity: '10g', cost: 8.5 },
@@ -699,6 +793,7 @@ const servicesWithoutDetails = [
         name: 'FOOT MSG',
         category: SERVICE_CATEGORIES.PEDICURE_MANICURE,
         cost: 20,
+        defaultPrice: 199,
         products: [
             { name: 'FOOT CREAM', quantity: '15g', cost: 14 },
             { name: 'FOOT SCRUB', quantity: '8g', cost: 6 },
@@ -709,6 +804,7 @@ const servicesWithoutDetails = [
         name: 'ROOT TOUCH UP',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 98,
+        defaultPrice: 399,
         products: [
             { name: 'ROOT COLOUR', quantity: '30g', cost: 60 },
             { name: 'DEVELOPER', quantity: '30ml', cost: 24 },
@@ -721,6 +817,7 @@ const servicesWithoutDetails = [
         name: 'FE COLOUR',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 185,
+        defaultPrice: 1299,
         products: [
             { name: 'HAIR COLOUR', quantity: '90g', cost: 135 },
             { name: 'DEVELOPER', quantity: '90ml', cost: 36 },
@@ -733,6 +830,7 @@ const servicesWithoutDetails = [
         name: 'IRONING',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 14,
+        defaultPrice: 249,
         products: [
             { name: 'HEAT PROTECTOR SPRAY', quantity: '10ml', cost: 14 },
         ],
@@ -742,6 +840,7 @@ const servicesWithoutDetails = [
         name: 'NAIL CUT',
         category: SERVICE_CATEGORIES.PEDICURE_MANICURE,
         cost: 3,
+        defaultPrice: 49,
         products: [
             { name: 'NAIL POLISH REMOVER', quantity: '2ml', cost: 1.5 },
             { name: 'COTTON', quantity: '2g', cost: 0.5 },
@@ -753,6 +852,7 @@ const servicesWithoutDetails = [
         name: 'INSTA TREATMENT',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 48,
+        defaultPrice: 499,
         products: [
             { name: 'INSTANT HAIR MASK', quantity: '20g', cost: 32 },
             { name: 'SHAMPOO', quantity: '10ml', cost: 12 },
@@ -764,6 +864,7 @@ const servicesWithoutDetails = [
         name: 'SAREE DRAPING',
         category: SERVICE_CATEGORIES.OTHER,
         cost: 5,
+        defaultPrice: 299,
         products: [
             { name: 'SAFETY PINS', quantity: '5 pcs', cost: 3 },
             { name: 'BLOUSE PINS', quantity: '3 pcs', cost: 2 },
@@ -774,6 +875,9 @@ const servicesWithoutDetails = [
         name: 'BOTOX',
         category: SERVICE_CATEGORIES.HAIR_SERVICES,
         cost: 125,
+        // Spin Salon India, Luxe/Advanced hair-spa band starts ~₹2500 for
+        // full botox/keratin-grade treatments; this is the lighter version
+        defaultPrice: 1499,
         products: [
             { name: 'BOTOX SOLUTION', quantity: '5ml', cost: 82 },
             { name: 'DEVELOPER', quantity: '5ml', cost: 4 },

@@ -12,7 +12,6 @@ import {
     ActivityIndicator,
     Keyboard,
     TouchableWithoutFeedback,
-    Easing,
     Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -26,9 +25,11 @@ export default function LoginScreen() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
-    const [isRegistering, setIsRegistering] = useState(false);
+    const [mode, setMode] = useState('login'); // 'login' | 'register' | 'forgot'
+    const [loginRole, setLoginRole] = useState('admin'); // 'admin' | 'worker'
     const [isLoading, setIsLoading] = useState(false);
-    const { login, register } = useAuth();
+    const [successMsg, setSuccessMsg] = useState('');
+    const { login, register, logout, sendRecovery } = useAuth();
 
     // Animation values
     const shakeAnimation = useRef(new Animated.Value(0)).current;
@@ -41,7 +42,6 @@ export default function LoginScreen() {
 
     // Entrance animation
     useEffect(() => {
-        // Logo bounce in
         Animated.spring(logoScale, {
             toValue: 1,
             tension: 50,
@@ -50,7 +50,6 @@ export default function LoginScreen() {
             useNativeDriver: true,
         }).start();
 
-        // Title fade in
         Animated.timing(titleOpacity, {
             toValue: 1,
             duration: 600,
@@ -58,7 +57,6 @@ export default function LoginScreen() {
             useNativeDriver: true,
         }).start();
 
-        // Card slide up
         Animated.parallel([
             Animated.spring(cardScale, {
                 toValue: 1,
@@ -94,23 +92,42 @@ export default function LoginScreen() {
     };
 
     const onPressIn = () => {
-        Animated.spring(buttonScale, {
-            toValue: 0.94,
-            useNativeDriver: true,
-        }).start();
+        Animated.spring(buttonScale, { toValue: 0.94, useNativeDriver: true }).start();
     };
 
     const onPressOut = () => {
-        Animated.spring(buttonScale, {
-            toValue: 1,
-            friction: 3,
-            useNativeDriver: true,
-        }).start();
+        Animated.spring(buttonScale, { toValue: 1, friction: 3, useNativeDriver: true }).start();
     };
 
-    const validateEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    const validateEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+
+    const switchMode = (next) => {
+        setMode(next);
+        setSuccessMsg('');
+    };
+
+    const handleForgotPassword = async () => {
+        if (!email || !validateEmail(email)) {
+            shake();
+            Alert.alert('Invalid Email', 'Enter the email address for your account first.');
+            return;
+        }
+        setIsLoading(true);
+        const result = await sendRecovery(email);
+        setIsLoading(false);
+        if (result.success) {
+            setSuccessMsg('Recovery email sent! Check your inbox for a link to reset your password.');
+        } else {
+            shake();
+            Alert.alert('Failed to Send', result.error || 'Could not send recovery email.');
+        }
+    };
 
     const handleSubmit = async () => {
+        if (mode === 'forgot') {
+            return handleForgotPassword();
+        }
+
         if (!email || !password) {
             shake();
             Alert.alert('Missing Info', 'Please fill in all fields');
@@ -126,27 +143,53 @@ export default function LoginScreen() {
             Alert.alert('Weak Password', 'Password must be at least 8 characters');
             return;
         }
-        if (isRegistering && !name) {
+        if (mode === 'register' && !name) {
             shake();
             Alert.alert('Missing Name', 'Please enter your name');
             return;
         }
 
         setIsLoading(true);
-        const result = isRegistering
+        const result = mode === 'register'
             ? await register(email, password, name)
             : await login(email, password);
 
+        if (result.success && mode === 'login') {
+            // Role-guard: an Admin who logs in on the Worker tab (or vice
+            // versa) gets bounced back out — same check web's LoginPage does,
+            // since a worker's own tab hides owner-only screens.
+            const userRole = result.user?.role;
+            if (loginRole === 'admin' && userRole === 'worker') {
+                await logout();
+                shake();
+                Alert.alert('Wrong Tab', 'This account is a Worker. Please use the Worker Login tab.');
+                setIsLoading(false);
+                return;
+            }
+            if (loginRole === 'worker' && userRole !== 'worker') {
+                await logout();
+                shake();
+                Alert.alert('Wrong Tab', 'This account is an Admin. Please use the Admin Login tab.');
+                setIsLoading(false);
+                return;
+            }
+        }
+
         if (!result.success) {
             shake();
-            Alert.alert(isRegistering ? 'Registration Failed' : 'Login Failed', result.error);
+            Alert.alert(mode === 'register' ? 'Registration Failed' : 'Login Failed', result.error);
         }
         setIsLoading(false);
     };
 
+    const tagline = mode === 'forgot'
+        ? 'Reset your password'
+        : mode === 'register'
+            ? 'Create your account'
+            : loginRole === 'admin' ? 'Admin Sign In' : 'Worker Sign In';
+
     return (
         <View style={styles.container}>
-            {/* Background Gradient */}
             <LinearGradient
                 colors={[Colors.gradientStart, Colors.background]}
                 style={StyleSheet.absoluteFill}
@@ -171,7 +214,7 @@ export default function LoginScreen() {
                             SALON PRO
                         </Animated.Text>
                         <Animated.Text style={[styles.tagline, { opacity: titleOpacity }]}>
-                            Expense Tracker
+                            {tagline}
                         </Animated.Text>
                     </View>
 
@@ -189,14 +232,39 @@ export default function LoginScreen() {
                             },
                         ]}
                     >
+                        {mode === 'login' && (
+                            <View style={styles.roleTabs}>
+                                <TouchableOpacity
+                                    style={[styles.roleTab, loginRole === 'admin' && styles.roleTabActive]}
+                                    onPress={() => setLoginRole('admin')}
+                                >
+                                    <Text style={[styles.roleTabText, loginRole === 'admin' && styles.roleTabTextActive]}>💼 Admin</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                    style={[styles.roleTab, loginRole === 'worker' && styles.roleTabActive]}
+                                    onPress={() => setLoginRole('worker')}
+                                >
+                                    <Text style={[styles.roleTabText, loginRole === 'worker' && styles.roleTabTextActive]}>💇 Worker</Text>
+                                </TouchableOpacity>
+                            </View>
+                        )}
+
                         <Text style={styles.cardTitle}>
-                            {isRegistering ? 'Create Account' : 'Welcome Back'}
+                            {mode === 'register' ? 'Create Account' : mode === 'forgot' ? 'Forgot Password' : 'Welcome Back'}
                         </Text>
                         <Text style={styles.cardSubtitle}>
-                            {isRegistering ? 'Sign up to get started' : 'Sign in to continue'}
+                            {mode === 'register' ? 'Sign up to get started'
+                                : mode === 'forgot' ? "We'll email you a reset link"
+                                    : 'Sign in to continue'}
                         </Text>
 
-                        {isRegistering && (
+                        {successMsg ? (
+                            <View style={styles.successBox}>
+                                <Text style={styles.successText}>✅ {successMsg}</Text>
+                            </View>
+                        ) : null}
+
+                        {mode === 'register' && (
                             <View style={styles.inputGroup}>
                                 <Text style={styles.inputLabel}>Full Name</Text>
                                 <TextInput
@@ -223,18 +291,20 @@ export default function LoginScreen() {
                             />
                         </View>
 
-                        <View style={styles.inputGroup}>
-                            <Text style={styles.inputLabel}>Password</Text>
-                            <TextInput
-                                style={styles.input}
-                                placeholder="Min 8 characters"
-                                placeholderTextColor={Colors.textMuted}
-                                value={password}
-                                onChangeText={setPassword}
-                                secureTextEntry
-                                onSubmitEditing={handleSubmit}
-                            />
-                        </View>
+                        {mode !== 'forgot' && (
+                            <View style={styles.inputGroup}>
+                                <Text style={styles.inputLabel}>Password</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Min 8 characters"
+                                    placeholderTextColor={Colors.textMuted}
+                                    value={password}
+                                    onChangeText={setPassword}
+                                    secureTextEntry
+                                    onSubmitEditing={handleSubmit}
+                                />
+                            </View>
+                        )}
 
                         <Animated.View style={{ transform: [{ scale: buttonScale }] }}>
                             <TouchableOpacity
@@ -255,26 +325,45 @@ export default function LoginScreen() {
                                         <ActivityIndicator color="#000" />
                                     ) : (
                                         <Text style={styles.submitBtnText}>
-                                            {isRegistering ? 'Create Account' : 'Sign In'} →
+                                            {mode === 'register' ? 'Create Account' : mode === 'forgot' ? 'Send Recovery Email' : 'Sign In'} →
                                         </Text>
                                     )}
                                 </LinearGradient>
                             </TouchableOpacity>
                         </Animated.View>
 
-                        <TouchableOpacity
-                            style={styles.switchBtn}
-                            onPress={() => setIsRegistering(!isRegistering)}
-                        >
-                            <Text style={styles.switchText}>
-                                {isRegistering
-                                    ? 'Already have an account? '
-                                    : "Don't have an account? "}
-                                <Text style={styles.switchTextBold}>
-                                    {isRegistering ? 'Sign In' : 'Sign Up'}
+                        {mode === 'login' && (
+                            <>
+                                {loginRole === 'admin' ? (
+                                    <TouchableOpacity style={styles.switchBtn} onPress={() => switchMode('register')}>
+                                        <Text style={styles.switchText}>
+                                            Don't have an account? <Text style={styles.switchTextBold}>Sign Up</Text>
+                                        </Text>
+                                    </TouchableOpacity>
+                                ) : (
+                                    <Text style={[styles.switchText, { textAlign: 'center', marginTop: 24 }]}>
+                                        Workers are invited by the salon admin.
+                                    </Text>
+                                )}
+                                <TouchableOpacity style={{ alignItems: 'center', marginTop: 12 }} onPress={() => switchMode('forgot')}>
+                                    <Text style={styles.forgotText}>Forgot password?</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
+
+                        {mode === 'forgot' && (
+                            <TouchableOpacity style={styles.switchBtn} onPress={() => switchMode('login')}>
+                                <Text style={styles.switchText}>← <Text style={styles.switchTextBold}>Back to Sign In</Text></Text>
+                            </TouchableOpacity>
+                        )}
+
+                        {mode === 'register' && (
+                            <TouchableOpacity style={styles.switchBtn} onPress={() => switchMode('login')}>
+                                <Text style={styles.switchText}>
+                                    Already have an account? <Text style={styles.switchTextBold}>Sign In</Text>
                                 </Text>
-                            </Text>
-                        </TouchableOpacity>
+                            </TouchableOpacity>
+                        )}
                     </Animated.View>
                 </KeyboardAvoidingView>
             </TouchableWithoutFeedback>
@@ -335,6 +424,32 @@ const styles = StyleSheet.create({
         shadowRadius: 32,
         elevation: 16,
     },
+    roleTabs: {
+        flexDirection: 'row',
+        backgroundColor: 'rgba(255,255,255,0.05)',
+        padding: 4,
+        borderRadius: 12,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.08)',
+    },
+    roleTab: {
+        flex: 1,
+        paddingVertical: 10,
+        borderRadius: 9,
+        alignItems: 'center',
+    },
+    roleTabActive: {
+        backgroundColor: Colors.primary,
+    },
+    roleTabText: {
+        fontSize: 13,
+        fontFamily: 'Poppins_600SemiBold',
+        color: Colors.textMuted,
+    },
+    roleTabTextActive: {
+        color: '#000',
+    },
     cardTitle: {
         fontSize: 26,
         color: Colors.text,
@@ -345,7 +460,20 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: Colors.textSecondary,
         fontFamily: 'Poppins_400Regular',
-        marginBottom: 28,
+        marginBottom: 20,
+    },
+    successBox: {
+        backgroundColor: 'rgba(16,185,129,0.12)',
+        borderWidth: 1,
+        borderColor: '#10B981',
+        borderRadius: 12,
+        padding: 12,
+        marginBottom: 16,
+    },
+    successText: {
+        color: '#10B981',
+        fontSize: 13,
+        fontFamily: 'Poppins_500Medium',
     },
     inputGroup: {
         marginBottom: 20,
@@ -399,5 +527,11 @@ const styles = StyleSheet.create({
     switchTextBold: {
         color: Colors.primary,
         fontFamily: 'Poppins_600SemiBold',
+    },
+    forgotText: {
+        color: Colors.textMuted,
+        fontSize: 13,
+        fontFamily: 'Poppins_500Medium',
+        textDecorationLine: 'underline',
     },
 });

@@ -11,7 +11,14 @@
  * different number than what a customer was charged.
  */
 
-/** Merges each catalog entry with this owner's price for it, if they've set one. */
+/**
+ * Merges each catalog entry with this owner's price for it, if they've set
+ * one. Falls back to the catalog's own `defaultPrice` (a researched retail
+ * estimate — see data/servicesCatalog.js) when the owner hasn't set an
+ * explicit override yet, so a fresh salon isn't stuck charging ₹0 for
+ * everything until someone manually prices all ~80 services one by one.
+ * An explicit owner price (service_prices collection) always wins.
+ */
 export function mergeCatalogWithPrices(catalog, priceDocs) {
   const priceByServiceId = {};
   priceDocs.forEach((p) => {
@@ -19,7 +26,7 @@ export function mergeCatalogWithPrices(catalog, priceDocs) {
   });
   return catalog.map((service) => ({
     ...service,
-    price: priceByServiceId[service.id] ?? null,
+    price: priceByServiceId[service.id] ?? service.defaultPrice ?? null,
   }));
 }
 

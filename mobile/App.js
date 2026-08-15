@@ -3,19 +3,46 @@ import { StatusBar } from 'expo-status-bar';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ExpenseProvider } from './context/ExpenseContext';
 import { ServicesProvider } from './context/ServicesContext';
+import { StockProvider } from './context/StockContext';
+import { WorkersProvider } from './context/WorkersContext';
+import { CustomersProvider } from './context/CustomersContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import LoginScreen from './screens/LoginScreen';
 import HomeScreen from './screens/HomeScreen';
 import ServicesScreen from './screens/ServicesScreen';
+import StockScreen from './screens/StockScreen';
+import WorkersScreen from './screens/WorkersScreen';
+import CustomersScreen from './screens/CustomersScreen';
 import AnalysisScreen from './screens/AnalysisScreen';
+import WorkerDashboardScreen from './screens/WorkerDashboardScreen';
 import { ActivityIndicator, View, StyleSheet, Text, TouchableOpacity, Platform } from 'react-native';
 import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
+// Same tabs an owner sees on web's Sidebar, plus a worker-only "Dashboard"
+// tab (web's "My Dashboard") that becomes the default landing tab for a
+// worker instead of Expenses. Everything else here is owner-only, matching
+// what the backend actually enforces (a worker hitting these API routes
+// gets a 403 regardless of whether this tab is shown).
+const TABS = [
+  { key: 'dashboard', label: 'Dashboard', icon: 'home', workerOnly: true },
+  { key: 'expenses', label: 'Expenses', icon: 'wallet', ownerOnly: true },
+  { key: 'services', label: 'Services', icon: 'cut' },
+  { key: 'stock', label: 'Stock', icon: 'cube', ownerOnly: true },
+  { key: 'workers', label: 'Workers', icon: 'people', ownerOnly: true },
+  { key: 'customers', label: 'Customers', icon: 'person-circle', ownerOnly: true },
+  { key: 'analysis', label: 'Analysis', icon: 'analytics', ownerOnly: true },
+];
+
 // Custom Tab Bar Component
-function TabBar({ activeTab, setActiveTab }) {
+function TabBar({ activeTab, setActiveTab, isWorker }) {
   const { colors } = useTheme();
+  const tabs = TABS.filter(t => {
+    if (t.ownerOnly) return !isWorker;
+    if (t.workerOnly) return isWorker;
+    return true;
+  });
 
   return (
     <View style={styles.tabBarContainer}>
@@ -23,75 +50,60 @@ function TabBar({ activeTab, setActiveTab }) {
         colors={colors.tabGradient}
         style={[styles.tabBarGradient, { borderTopColor: colors.border }]}
       >
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => setActiveTab('expenses')}
-        >
-          <View style={[styles.iconContainer, activeTab === 'expenses' && styles.activeIconContainer]}>
-            <Ionicons
-              name={activeTab === 'expenses' ? "wallet" : "wallet-outline"}
-              size={24}
-              color={activeTab === 'expenses' ? '#FFF' : colors.textMuted}
-            />
-          </View>
-          <Text style={[styles.tabLabel, { color: activeTab === 'expenses' ? colors.primary : colors.textMuted }]}>
-            Expenses
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => setActiveTab('services')}
-        >
-          <View style={[styles.iconContainer, activeTab === 'services' && styles.activeIconContainer]}>
-            <Ionicons
-              name={activeTab === 'services' ? "cut" : "cut-outline"}
-              size={24}
-              color={activeTab === 'services' ? '#FFF' : colors.textMuted}
-            />
-          </View>
-          <Text style={[styles.tabLabel, { color: activeTab === 'services' ? colors.primary : colors.textMuted }]}>
-            Services
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.tabItem}
-          onPress={() => setActiveTab('analysis')}
-        >
-          <View style={[styles.iconContainer, activeTab === 'analysis' && styles.activeIconContainer]}>
-            <Ionicons
-              name={activeTab === 'analysis' ? "analytics" : "analytics-outline"}
-              size={24}
-              color={activeTab === 'analysis' ? '#FFF' : colors.textMuted}
-            />
-          </View>
-          <Text style={[styles.tabLabel, { color: activeTab === 'analysis' ? colors.primary : colors.textMuted }]}>
-            Analysis
-          </Text>
-        </TouchableOpacity>
+        {tabs.map(tab => (
+          <TouchableOpacity
+            key={tab.key}
+            style={styles.tabItem}
+            onPress={() => setActiveTab(tab.key)}
+          >
+            <View style={[styles.iconContainer, activeTab === tab.key && styles.activeIconContainer]}>
+              <Ionicons
+                name={activeTab === tab.key ? tab.icon : `${tab.icon}-outline`}
+                size={24}
+                color={activeTab === tab.key ? '#FFF' : colors.textMuted}
+              />
+            </View>
+            <Text style={[styles.tabLabel, { color: activeTab === tab.key ? colors.primary : colors.textMuted }]}>
+              {tab.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </LinearGradient>
     </View>
   );
 }
 
 function MainApp() {
-  const [activeTab, setActiveTab] = useState('expenses');
+  const { user } = useAuth();
+  const isWorker = user?.role === 'worker';
+  const [activeTab, setActiveTab] = useState(isWorker ? 'dashboard' : 'expenses');
   const { colors } = useTheme();
 
+  // A worker landing on an owner-only tab (e.g. leftover state from a
+  // previous admin session on this device) gets redirected to their own
+  // dashboard instead — the real enforcement is the backend's 403, this is
+  // just about not showing a broken-looking screen. Mirrors web's
+  // Sidebar/App.jsx effectivePage logic.
+  const ownerOnlyKeys = TABS.filter(t => t.ownerOnly).map(t => t.key);
+  const effectiveTab = isWorker && ownerOnlyKeys.includes(activeTab) ? 'dashboard' : activeTab;
+
   const renderScreen = () => {
-    switch (activeTab) {
+    switch (effectiveTab) {
+      case 'dashboard': return <WorkerDashboardScreen />;
       case 'expenses': return <HomeScreen />;
       case 'services': return <ServicesScreen />;
+      case 'stock': return <StockScreen />;
+      case 'workers': return <WorkersScreen />;
+      case 'customers': return <CustomersScreen />;
       case 'analysis': return <AnalysisScreen />;
-      default: return <HomeScreen />;
+      default: return isWorker ? <WorkerDashboardScreen /> : <HomeScreen />;
     }
   };
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {renderScreen()}
-      <TabBar activeTab={activeTab} setActiveTab={setActiveTab} />
+      <TabBar activeTab={effectiveTab} setActiveTab={setActiveTab} isWorker={isWorker} />
     </View>
   );
 }
@@ -134,7 +146,13 @@ export default function App() {
       <AuthProvider>
         <ExpenseProvider>
           <ServicesProvider>
-            <AppContent />
+            <StockProvider>
+              <WorkersProvider>
+                <CustomersProvider>
+                  <AppContent />
+                </CustomersProvider>
+              </WorkersProvider>
+            </StockProvider>
           </ServicesProvider>
         </ExpenseProvider>
       </AuthProvider>
@@ -172,7 +190,7 @@ const styles = StyleSheet.create({
   tabBarGradient: {
     flexDirection: 'row',
     paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingHorizontal: 6,
     borderTopWidth: 1,
   },
   tabItem: {
@@ -182,9 +200,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   iconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 13,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 4,
@@ -198,7 +216,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   tabLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontFamily: 'Poppins_500Medium',
   },
 });

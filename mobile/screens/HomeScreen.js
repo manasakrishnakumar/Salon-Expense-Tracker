@@ -22,6 +22,7 @@ import { useExpenses } from '../context/ExpenseContext';
 import { useServices } from '../context/ServicesContext';
 import { useTheme } from '../context/ThemeContext';
 import ThemeToggle from '../components/ThemeToggle';
+import ChangePasswordModal from '../components/ChangePasswordModal';
 import { useNavigation } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');
@@ -112,8 +113,13 @@ const TransactionItem = memo(({ expense, colors, formatDate, onDelete }) => (
 export default function HomeScreen() {
     const { logout, user } = useAuth();
     const { expenses, addExpense, deleteExpense, getMonthlyTotal, getTotalExpenses } = useExpenses();
-    const { getTodayTotalCost, getMonthlyServiceCost } = useServices(); // Added Services Hook
+    // Revenue = what was actually charged (totalPrice) — NOT product cost.
+    // This used to show getTodayTotalCost/getMonthlyServiceCost here, which
+    // displayed the salon's internal product-usage cost as if it were
+    // revenue. Fixed to match web's price vs cost distinction.
+    const { getTodayRevenue, getMonthlyRevenue } = useServices();
     const { colors } = useTheme();
+    const [showChangePassword, setShowChangePassword] = useState(false);
     // Use navigation if available via props or hook, or switch tabs via context if needed. 
     // Since TabBar is custom in App.js, we can't easily nav to 'Services' tab from here without a Nav Context or ref.
     // For now, "Add Service" will just be a visual cue or we can try to expose setActiveTab. 
@@ -129,8 +135,8 @@ export default function HomeScreen() {
     });
 
     // Data
-    const todayRevenue = getTodayTotalCost();
-    const monthlyRevenue = getMonthlyServiceCost();
+    const todayRevenue = getTodayRevenue();
+    const monthlyRevenue = getMonthlyRevenue();
     const monthlyExpense = getMonthlyTotal();
     const netProfit = monthlyRevenue - monthlyExpense;
 
@@ -210,6 +216,12 @@ export default function HomeScreen() {
                 </View>
                 <View style={styles.headerRight}>
                     <TouchableOpacity
+                        style={[styles.logoutBtn, { backgroundColor: colors.glass, borderColor: colors.border }]}
+                        onPress={() => setShowChangePassword(true)}
+                    >
+                        <Ionicons name="key-outline" size={20} color={colors.textSecondary} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
                         style={[styles.logoutBtn, { backgroundColor: colors.danger + '15', borderColor: colors.danger + '30' }]}
                         onPress={logout}
                     >
@@ -218,6 +230,8 @@ export default function HomeScreen() {
                     <ThemeToggle />
                 </View>
             </Animated.View>
+
+            <ChangePasswordModal visible={showChangePassword} onClose={() => setShowChangePassword(false)} />
 
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
