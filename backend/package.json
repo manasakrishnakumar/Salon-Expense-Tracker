@@ -9,6 +9,7 @@
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
     "setup:appwrite": "node scripts/setupAppwriteSchema.js",
+    "seed:demo": "node scripts/seedDemoData.mjs",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch"
   },
