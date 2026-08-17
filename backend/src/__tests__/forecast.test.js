@@ -5,6 +5,9 @@ import {
   forecastNextMonthTotal,
   computeDailyConsumptionRates,
   estimateStockRunout,
+  computeWeightedDailyRates,
+  projectDaysUntilEmpty,
+  estimateStockRunoutWeighted,
 } from '../logic/forecast.js';
 
 describe('linearRegression', () => {
@@ -107,5 +110,110 @@ describe('estimateStockRunout', () => {
     const result = estimateStockRunout(stockMap, rates);
     expect(result.map((r) => r.name)).toEqual(['FAST', 'SLOW']);
     expect(result[0].daysUntilEmpty).toBe(2);
+  });
+});
+
+describe('computeWeightedDailyRates', () => {
+  const daysAgoISO = (n) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d.toISOString();
+  };
+
+  it('ignores records outside the lookback window', () => {
+    const records = [{ serviceID: 'diamond_facial', quantity: 1, Date: daysAgoISO(100) }];
+    expect(computeWeightedDailyRates(records, 60)).toEqual({});
+  });
+
+  it('weights recent usage more heavily than old usage of the same total size', () => {
+    // diamond_facial uses CLEANSER 10g/service. 100g today + 100g 40 days
+    // ago = 200g total either way, but a flat 60-day average (3.33g/day)
+    // should undercount how much today's 100g actually matters.
+    const records = [
+      { serviceID: 'diamond_facial', quantity: 10, Date: daysAgoISO(0) },
+      { serviceID: 'diamond_facial', quantity: 10, Date: daysAgoISO(40) },
+    ];
+    const rates = computeWeightedDailyRates(records, 60, 0.9);
+    const flatAverage = 200 / 60;
+    expect(rates.CLEANSER.rate).toBeGreaterThan(flatAverage);
+  });
+
+  it('reports a positive trend when this week\'s usage exceeds last week\'s', () => {
+    const records = [
+      { serviceID: 'diamond_facial', quantity: 5, Date: daysAgoISO(1) },  // this week: 50g
+      { serviceID: 'diamond_facial', quantity: 1, Date: daysAgoISO(10) }, // prior week: 10g
+    ];
+    expect(computeWeightedDailyRates(records, 60).CLEANSER.trendPercent).toBeGreaterThan(0);
+  });
+
+  it('reports a negative trend when this week\'s usage is below last week\'s', () => {
+    const records = [
+      { serviceID: 'diamond_facial', quantity: 1, Date: daysAgoISO(1) },  // this week: 10g
+      { serviceID: 'diamond_facial', quantity: 5, Date: daysAgoISO(10) }, // prior week: 50g
+    ];
+    expect(computeWeightedDailyRates(records, 60).CLEANSER.trendPercent).toBeLessThan(0);
+  });
+
+  it('treats fresh usage with no prior-week baseline as a 100% rise, not a divide-by-zero', () => {
+    const records = [{ serviceID: 'diamond_facial', quantity: 1, Date: daysAgoISO(1) }];
+    expect(computeWeightedDailyRates(records, 60).CLEANSER.trendPercent).toBe(100);
+  });
+
+  it('gives the weekday usage is concentrated on a multiplier above every other day', () => {
+    const todayWeekday = new Date().getDay();
+    // Every 7-day-back offset lands on the same weekday as today.
+    const records = [];
+    for (let d = 0; d <= 56; d += 7) {
+      records.push({ serviceID: 'diamond_facial', quantity: 10, Date: daysAgoISO(d) });
+    }
+    const { weekdayMultipliers } = computeWeightedDailyRates(records, 60).CLEANSER;
+    expect(weekdayMultipliers[todayWeekday]).toBeGreaterThan(1);
+    weekdayMultipliers.forEach((m, wd) => {
+      if (wd !== todayWeekday) expect(m).toBeLessThan(1);
+    });
+  });
+});
+
+describe('projectDaysUntilEmpty', () => {
+  it('returns null when there is no measurable usage rate', () => {
+    expect(projectDaysUntilEmpty(100, { rate: 0, weekdayMultipliers: Array(7).fill(1) })).toBeNull();
+    expect(projectDaysUntilEmpty(100, null)).toBeNull();
+  });
+
+  it('returns 0 when already out of stock', () => {
+    expect(projectDaysUntilEmpty(0, { rate: 5, weekdayMultipliers: Array(7).fill(1) })).toBe(0);
+  });
+
+  it('matches simple division when every day carries the same multiplier', () => {
+    const rateInfo = { rate: 10, weekdayMultipliers: Array(7).fill(1) };
+    expect(projectDaysUntilEmpty(100, rateInfo)).toBe(10);
+  });
+
+  it('depletes proportionally faster when the multiplier scales usage up', () => {
+    const rateInfo = { rate: 10, weekdayMultipliers: Array(7).fill(2) };
+    expect(projectDaysUntilEmpty(100, rateInfo)).toBe(5); // double daily usage -> half the days
+  });
+});
+
+describe('estimateStockRunoutWeighted', () => {
+  it('excludes products with no rate info', () => {
+    const stockMap = { CLEANSER: { name: 'CLEANSER', remaining: 100, unit: 'g' } };
+    expect(estimateStockRunoutWeighted(stockMap, {})).toEqual([]);
+  });
+
+  it('sorts soonest-to-run-out first and carries trendPercent through', () => {
+    const stockMap = {
+      SLOW: { name: 'SLOW', remaining: 1000, unit: 'g' },
+      FAST: { name: 'FAST', remaining: 10, unit: 'g' },
+    };
+    const flat = Array(7).fill(1);
+    const rates = {
+      SLOW: { rate: 1, trendPercent: 5, weekdayMultipliers: flat },
+      FAST: { rate: 5, trendPercent: -10, weekdayMultipliers: flat },
+    };
+    const result = estimateStockRunoutWeighted(stockMap, rates);
+    expect(result.map((r) => r.name)).toEqual(['FAST', 'SLOW']);
+    expect(result[0].daysUntilEmpty).toBe(2);
+    expect(result[0].trendPercent).toBe(-10);
   });
 });

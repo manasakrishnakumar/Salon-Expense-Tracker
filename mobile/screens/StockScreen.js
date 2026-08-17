@@ -260,7 +260,14 @@ export default function StockScreen() {
                         <View style={[styles.row, { backgroundColor: colors.cardBackground, borderColor: colors.border, flexDirection: 'column', alignItems: 'stretch' }]}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                 <View style={{ flex: 1 }}>
-                                    <Text style={[styles.rowName, { color: colors.text }]}>{s.name}</Text>
+                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                                        <Text style={[styles.rowName, { color: colors.text }]}>{s.name}</Text>
+                                        {!!s.trendPercent && (
+                                            <Text style={{ fontSize: 11, fontFamily: 'Poppins_700Bold', color: s.trendPercent > 0 ? '#F59E0B' : '#10B981' }}>
+                                                {s.trendPercent > 0 ? '↑' : '↓'} {Math.abs(s.trendPercent)}%
+                                            </Text>
+                                        )}
+                                    </View>
                                     <Text style={[styles.rowMeta, { color: colors.textSecondary }]}>
                                         Remaining: {s.remaining.toFixed(0)} {s.unit} · {s.dailyUsage} {s.unit}/day
                                     </Text>

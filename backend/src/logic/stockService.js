@@ -1,5 +1,6 @@
 import { ALL_SERVICES } from '../data/servicesCatalog.js';
 import { findService, parseQuantityAmount } from './costCalculator.js';
+import { computeWeightedDailyRates, projectDaysUntilEmpty } from './forecast.js';
 
 const DEFAULT_LOW_STOCK_THRESHOLD = 100;
 
@@ -101,19 +102,27 @@ export function getTotalInventoryValue(restockDocs = []) {
 
 /**
  * Phase 5 — I5: Reorder suggestions.
- * Computes average daily usage over the last N days, then recommends
- * a 30-day reorder quantity for each product that is in use.
+ *
+ * Uses the exponentially-weighted, weekday-seasonal demand model from
+ * logic/forecast.js (recent usage counts more than old usage, and each
+ * future day is projected using that weekday's actual usage pattern
+ * instead of a flat average) — see the comment block above
+ * computeWeightedDailyRates() there for the full reasoning. Falls back to
+ * the old flat totalUsed/days average only when there's no day-level
+ * service-record data to build the weighted model from (e.g. a caller
+ * that hands in a pre-aggregated stockMap without the underlying records).
  *
  * @param {object} stockMap - output of computeStockStatus
- * @param {Array}  restockDocs - to determine when first restock happened
- * @param {number} lookbackDays - how far back to compute the rate (default 60)
+ * @param {Array}  restockDocs - to determine when first restock happened (flat-average fallback only)
+ * @param {Array}  serviceRecordDocs - day-level usage history, for the weighted model
+ * @param {number} lookbackDays - how far back to build the model from (default 60)
  * @returns {Array} sorted by urgency (days until empty)
  */
-export function computeReorderSuggestions(stockMap, restockDocs = [], lookbackDays = 60) {
+export function computeReorderSuggestions(stockMap, restockDocs = [], serviceRecordDocs = [], lookbackDays = 60) {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - lookbackDays);
 
-  // Find first restock date per product
+  // Find first restock date per product (only needed for the flat-average fallback below)
   const firstRestock = {};
   restockDocs.forEach((r) => {
     const key = String(r.productName || '').toUpperCase().trim();
@@ -122,19 +131,31 @@ export function computeReorderSuggestions(stockMap, restockDocs = [], lookbackDa
     if (!firstRestock[key] || d < firstRestock[key]) firstRestock[key] = d;
   });
 
+  const weightedRates = computeWeightedDailyRates(serviceRecordDocs, lookbackDays);
   const suggestions = [];
 
   Object.values(stockMap).forEach((product) => {
     if (product.neverRestocked || product.totalUsed === 0) return;
 
-    const start = firstRestock[product.name] || cutoff;
-    const daysSinceStart = Math.max(1, Math.round((Date.now() - start.getTime()) / 86400000));
-    const effectiveDays = Math.min(daysSinceStart, lookbackDays);
-    const dailyUsage = (product.totalUsed + product.totalAdjusted) / effectiveDays;
+    const rateInfo = weightedRates[product.name];
+    let dailyUsage;
+    let daysUntilEmpty;
+    let trendPercent = 0;
 
-    if (dailyUsage <= 0) return;
+    if (rateInfo && rateInfo.rate > 0) {
+      dailyUsage = rateInfo.rate;
+      daysUntilEmpty = product.remaining > 0 ? projectDaysUntilEmpty(product.remaining, rateInfo) : 0;
+      trendPercent = rateInfo.trendPercent;
+    } else {
+      const start = firstRestock[product.name] || cutoff;
+      const daysSinceStart = Math.max(1, Math.round((Date.now() - start.getTime()) / 86400000));
+      const effectiveDays = Math.min(daysSinceStart, lookbackDays);
+      dailyUsage = (product.totalUsed + product.totalAdjusted) / effectiveDays;
+      daysUntilEmpty = product.remaining > 0 ? Math.floor(product.remaining / dailyUsage) : 0;
+    }
 
-    const daysUntilEmpty = product.remaining > 0 ? Math.floor(product.remaining / dailyUsage) : 0;
+    if (!dailyUsage || dailyUsage <= 0) return;
+
     const suggestedReorderQty = Math.ceil(dailyUsage * 30); // 30-day supply
 
     let urgency = 'ok';
@@ -150,6 +171,7 @@ export function computeReorderSuggestions(stockMap, restockDocs = [], lookbackDa
       daysUntilEmpty,
       suggestedReorderQty,
       urgency,
+      trendPercent,
     });
   });
 

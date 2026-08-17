@@ -112,3 +112,155 @@ export function estimateStockRunout(stockStatusMap, dailyRates) {
     .filter((p) => p.daysUntilEmpty !== null)
     .sort((a, b) => a.daysUntilEmpty - b.daysUntilEmpty);
 }
+
+/**
+ * ── Weighted demand forecasting ──────────────────────────────────────────
+ *
+ * computeDailyConsumptionRates() above treats every day in the lookback
+ * window as equally informative — a flat average. Two ways that's naive
+ * for a real salon:
+ *
+ *  1. A product's usage pattern *changes* (a service got popular, a
+ *     product got swapped) — a day from three weeks ago shouldn't count as
+ *     much as yesterday. We fix this with exponential decay: each day's
+ *     usage is weighted by `decay^daysAgo`, so recent days dominate the
+ *     rate without discarding older data outright.
+ *
+ *  2. Usage isn't flat across the week — a salon's Saturday is not its
+ *     Tuesday. We fix this by computing a per-weekday multiplier (that
+ *     weekday's average usage ÷ the overall average) and using it to
+ *     project each *future* day individually instead of assuming every
+ *     day between now and empty looks like an average day.
+ *
+ * Both pieces are plain weighted averages — no external ML library or
+ * service needed — but together they're materially more accurate than a
+ * flat mean, and they surface a "usage rising/falling X% this week" signal
+ * a flat average can't produce at all.
+ */
+
+/**
+ * @param {Array} serviceRecordDocs
+ * @param {number} lookbackDays - how far back to build the model from
+ * @param {number} decay - per-day decay factor (0-1); 1 = flat average, lower = more recency-biased
+ * @returns {Record<string, { rate: number, trendPercent: number, weekdayMultipliers: number[] }>}
+ *          weekdayMultipliers is indexed 0=Sunday..6=Saturday
+ */
+export function computeWeightedDailyRates(serviceRecordDocs, lookbackDays = 60, decay = 0.9) {
+  const now = new Date();
+  const cutoff = new Date(now);
+  cutoff.setDate(cutoff.getDate() - lookbackDays);
+
+  // Bucket usage by exact calendar day per product, instead of one grand total.
+  const dailyUsageByProduct = {};
+  serviceRecordDocs.forEach((record) => {
+    const recordDate = new Date(record.Date);
+    if (Number.isNaN(recordDate.getTime()) || recordDate < cutoff) return;
+    const service = findService(record.serviceID);
+    if (!service) return;
+    const dateKey = recordDate.toISOString().split('T')[0];
+    getProductsConsumed(service, record.quantity).forEach((p) => {
+      if (!dailyUsageByProduct[p.name]) dailyUsageByProduct[p.name] = {};
+      dailyUsageByProduct[p.name][dateKey] = (dailyUsageByProduct[p.name][dateKey] || 0) + p.totalQty;
+    });
+  });
+
+  const result = {};
+  for (const [productName, dayMap] of Object.entries(dailyUsageByProduct)) {
+    let weightedSum = 0;
+    let weightTotal = 0;
+    let overallTotal = 0;
+    const weekdayTotals = [0, 0, 0, 0, 0, 0, 0];
+    const weekdayCounts = [0, 0, 0, 0, 0, 0, 0];
+    let recentWeek = 0;
+    let priorWeek = 0;
+
+    for (let d = 0; d < lookbackDays; d++) {
+      const day = new Date(now);
+      day.setDate(day.getDate() - d);
+      const key = day.toISOString().split('T')[0];
+      const qty = dayMap[key] || 0;
+      const weight = decay ** d;
+
+      weightedSum += qty * weight;
+      weightTotal += weight;
+      overallTotal += qty;
+
+      const wd = day.getDay();
+      weekdayTotals[wd] += qty;
+      weekdayCounts[wd] += 1;
+
+      if (d < 7) recentWeek += qty;
+      else if (d < 14) priorWeek += qty;
+    }
+
+    const weightedRate = weightTotal > 0 ? weightedSum / weightTotal : 0;
+    const overallDailyAvg = overallTotal / lookbackDays;
+    const weekdayMultipliers = weekdayTotals.map((total, i) => {
+      if (overallDailyAvg <= 0 || weekdayCounts[i] === 0) return 1;
+      const avgForThisWeekday = total / weekdayCounts[i];
+      return avgForThisWeekday / overallDailyAvg;
+    });
+
+    // Week-over-week trend, as a signed percentage. With no usage in the
+    // prior week we can't express a ratio — treat any usage this week as
+    // "new" (100%) rather than dividing by zero.
+    const trendPercent = priorWeek > 0
+      ? Math.round(((recentWeek - priorWeek) / priorWeek) * 100)
+      : (recentWeek > 0 ? 100 : 0);
+
+    result[productName] = { rate: weightedRate, trendPercent, weekdayMultipliers };
+  }
+  return result;
+}
+
+/**
+ * Projects forward day by day — applying that weekday's seasonality
+ * multiplier to each future day — until remaining stock is used up, rather
+ * than the flat-average `remaining / rate` division. Two products with the
+ * identical average rate but different weekly shapes (steady vs
+ * weekend-heavy) can legitimately run out on different days; this is what
+ * makes that visible.
+ *
+ * @param {number} remaining
+ * @param {{ rate: number, weekdayMultipliers: number[] }} rateInfo
+ * @param {number} maxDays - safety cap so a near-zero rate can't loop forever
+ * @returns {number|null} days from today, or null if there's no measurable usage
+ */
+export function projectDaysUntilEmpty(remaining, rateInfo, maxDays = 365) {
+  if (!rateInfo || rateInfo.rate <= 0) return null;
+  if (remaining <= 0) return 0;
+
+  let stock = remaining;
+  const now = new Date();
+  for (let d = 1; d <= maxDays; d++) {
+    const day = new Date(now);
+    day.setDate(day.getDate() + d);
+    const multiplier = rateInfo.weekdayMultipliers[day.getDay()] ?? 1;
+    stock -= rateInfo.rate * multiplier;
+    if (stock <= 0) return d;
+  }
+  return maxDays;
+}
+
+/**
+ * Weighted counterpart to estimateStockRunout() — same shape of output,
+ * plus `trendPercent`, computed from computeWeightedDailyRates() instead
+ * of a flat per-day average.
+ */
+export function estimateStockRunoutWeighted(stockStatusMap, weightedRates) {
+  return Object.values(stockStatusMap)
+    .map((product) => {
+      const rateInfo = weightedRates[product.name];
+      const daysUntilEmpty = rateInfo ? projectDaysUntilEmpty(product.remaining, rateInfo) : null;
+      return {
+        name: product.name,
+        remaining: product.remaining,
+        unit: product.unit,
+        dailyConsumptionRate: rateInfo ? Math.round(rateInfo.rate * 1000) / 1000 : 0,
+        trendPercent: rateInfo ? rateInfo.trendPercent : 0,
+        daysUntilEmpty,
+      };
+    })
+    .filter((p) => p.daysUntilEmpty !== null)
+    .sort((a, b) => a.daysUntilEmpty - b.daysUntilEmpty);
+}

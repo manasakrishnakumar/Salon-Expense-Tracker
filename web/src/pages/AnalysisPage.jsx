@@ -822,6 +822,7 @@ export default function AnalysisPage() {
                     <th>Product</th>
                     <th>Remaining</th>
                     <th>Daily Usage</th>
+                    <th>Trend</th>
                     <th>Days Until Empty</th>
                   </tr>
                 </thead>
@@ -831,6 +832,13 @@ export default function AnalysisPage() {
                       <td style={{ fontWeight: 700 }}>{p.name}</td>
                       <td>{p.remaining}{p.unit}</td>
                       <td>{p.dailyConsumptionRate}{p.unit}/day</td>
+                      <td>
+                        {p.trendPercent ? (
+                          <span style={{ color: p.trendPercent > 0 ? '#F59E0B' : '#10B981', fontWeight: 700, fontSize: 13 }}>
+                            {p.trendPercent > 0 ? '↑' : '↓'} {Math.abs(p.trendPercent)}%
+                          </span>
+                        ) : <span className="text-muted">—</span>}
+                      </td>
                       <td>
                         <span style={{ color: urgencyColor(p.daysUntilEmpty), fontWeight: 800 }}>
                           {p.daysUntilEmpty} days

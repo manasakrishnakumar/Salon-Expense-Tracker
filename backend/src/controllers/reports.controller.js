@@ -6,7 +6,7 @@ import {
   profitLossReport, generateCsvExport,
 } from '../logic/reportService.js';
 import { computeStockStatus, getLowStockProducts } from '../logic/stockService.js';
-import { forecastNextMonthTotal, computeDailyConsumptionRates, estimateStockRunout } from '../logic/forecast.js';
+import { forecastNextMonthTotal, computeWeightedDailyRates, estimateStockRunoutWeighted } from '../logic/forecast.js';
 import { sendDailySummaryEmail } from '../config/email.js';
 
 async function loadRecordsAndExpenses(userId) {
@@ -44,8 +44,12 @@ export async function forecast(req, res) {
 
   const adjustmentDocs = await listMine(env.collections.stockAdjustments, req.user.ownerId, [], 200).catch(() => []);
   const stockMap = computeStockStatus(restockDocs, serviceRecords, undefined, adjustmentDocs);
-  const dailyRates = computeDailyConsumptionRates(serviceRecords, 30);
-  const stockRunout = estimateStockRunout(stockMap, dailyRates);
+  // Exponentially-weighted + weekday-seasonal rates instead of a flat
+  // 30-day average — see logic/forecast.js for why. `trendPercent` on each
+  // row is new: whether that product's usage is picking up or slowing
+  // down week-over-week, which a flat average can't express at all.
+  const weightedRates = computeWeightedDailyRates(serviceRecords, 60);
+  const stockRunout = estimateStockRunoutWeighted(stockMap, weightedRates);
 
   res.json({
     expenseForecast,

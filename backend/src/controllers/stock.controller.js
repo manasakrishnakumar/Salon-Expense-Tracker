@@ -22,7 +22,7 @@ async function loadStockInputs(ownerId) {
 export async function stockStatus(req, res) {
   const { restockDocs, serviceRecordDocs, adjustmentDocs } = await loadStockInputs(req.user.ownerId);
   const stock = computeStockStatus(restockDocs, serviceRecordDocs, undefined, adjustmentDocs);
-  const reorderSuggestions = computeReorderSuggestions(stock, restockDocs);
+  const reorderSuggestions = computeReorderSuggestions(stock, restockDocs, serviceRecordDocs);
 
   res.json({
     products: buildProductMaster(),

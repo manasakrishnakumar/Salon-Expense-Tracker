@@ -32,6 +32,20 @@ function UrgencyBadge({ urgency }) {
   );
 }
 
+// Week-over-week usage trend, from the weighted demand model
+// (logic/forecast.js) — lets the owner see a product picking up speed
+// before it becomes a "critical" surprise.
+function TrendBadge({ trendPercent }) {
+  if (!trendPercent) return null;
+  const rising = trendPercent > 0;
+  const color = rising ? '#F59E0B' : '#10B981';
+  return (
+    <span style={{ fontSize: 11, fontWeight: 700, color }}>
+      {rising ? '↑' : '↓'} {Math.abs(trendPercent)}% this week
+    </span>
+  );
+}
+
 function WriteOffModal({ product, onClose, onSave }) {
   const [form, setForm] = useState({ quantityRemoved: '', reason: 'wastage', notes: '', date: new Date().toISOString().split('T')[0] });
   const [loading, setLoading] = useState(false);
@@ -171,7 +185,10 @@ export default function StockPage() {
               {reorderSuggestions.map(s => (
                 <div key={s.name} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '14px 16px', background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 15 }}>{s.name}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15 }}>{s.name}</div>
+                      <TrendBadge trendPercent={s.trendPercent} />
+                    </div>
                     <div className="text-sm text-muted">
                       Remaining: <strong>{s.remaining.toFixed(0)} {s.unit}</strong> · Daily use: <strong>{s.dailyUsage} {s.unit}/day</strong> · {s.daysUntilEmpty > 0 ? `Runs out in ~${s.daysUntilEmpty} days` : 'Already out'}
                     </div>
