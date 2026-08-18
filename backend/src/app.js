@@ -19,6 +19,7 @@ import { customersRouter } from './routes/customers.routes.js';
 import { attendanceRouter } from './routes/attendance.routes.js';
 import { stockAdjustmentsRouter } from './routes/stockAdjustments.routes.js';
 import { authRouter } from './routes/auth.routes.js';
+import { chatbotRouter } from './routes/chatbot.routes.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 export function createApp() {
@@ -52,6 +53,7 @@ export function createApp() {
   app.use('/api/attendance', attendanceRouter);
   app.use('/api/stock-adjustments', stockAdjustmentsRouter);
   app.use('/api/auth', authRouter);
+  app.use('/api/chatbot', chatbotRouter);
 
   app.use(notFound);
   if (sentryEnabled) Sentry.setupExpressErrorHandler(app);

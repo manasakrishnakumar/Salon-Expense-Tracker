@@ -87,3 +87,7 @@ export const stockAdjustmentSchema = z.object({
   date: z.string().optional(),
 });
 
+export const chatbotQuerySchema = z.object({
+  message: z.string().min(1).max(500),
+});
+

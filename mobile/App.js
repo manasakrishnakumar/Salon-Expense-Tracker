@@ -15,6 +15,7 @@ import WorkersScreen from './screens/WorkersScreen';
 import CustomersScreen from './screens/CustomersScreen';
 import AnalysisScreen from './screens/AnalysisScreen';
 import WorkerDashboardScreen from './screens/WorkerDashboardScreen';
+import ChatbotWidget from './components/ChatbotWidget';
 import { ActivityIndicator, View, StyleSheet, Text, TouchableOpacity, Platform } from 'react-native';
 import { useFonts, Poppins_400Regular, Poppins_500Medium, Poppins_600SemiBold, Poppins_700Bold } from '@expo-google-fonts/poppins';
 import { Ionicons } from '@expo/vector-icons';
@@ -103,6 +104,9 @@ function MainApp() {
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {renderScreen()}
+      {/* Owner-only, same boundary as the financial-report screens the
+          assistant draws its answers from. */}
+      {!isWorker && <ChatbotWidget />}
       <TabBar activeTab={effectiveTab} setActiveTab={setActiveTab} isWorker={isWorker} />
     </View>
   );

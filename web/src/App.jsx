@@ -7,6 +7,7 @@ import { StockProvider } from './context/StockContext';
 import { WorkersProvider } from './context/WorkersContext';
 import { CustomersProvider } from './context/CustomersContext';
 import Sidebar from './components/Sidebar';
+import ChatbotWidget from './components/ChatbotWidget';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import ServicesPage from './pages/ServicesPage';
@@ -60,6 +61,7 @@ function AppContent() {
       <main className="main-content">
         {renderPage()}
       </main>
+      <ChatbotWidget />
     </div>
   );
 }
